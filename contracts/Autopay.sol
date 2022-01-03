@@ -148,6 +148,34 @@ contract Autopay is UsingTellor {
     }
 
     /**
+    * @dev Getter function to read a specific payer struct
+    * @param _payerAddress address of payer account
+    * @param _queryId id of reported data
+    * @return address token
+    * @return uint256 reward
+    * @return uint256 balance
+    * @return uint256 startTime
+    * @return uint256 interval
+    * @return uint256 window
+    * @return uint256 buffer
+    */
+    function getPayer(address _payerAddress, bytes32 _queryId) external view returns (address, uint256, uint256, uint256, uint256, uint256, uint256){
+        Payer storage _payer = payers[_payerAddress][_queryId];
+        return (_payer.token, _payer.reward, _payer.balance, _payer.startTime, _payer.interval, _payer.window, _payer.buffer);
+    }
+
+    /**
+    * @dev Getter function to read if a reward has been claimed
+    * @param _payerAddress address of payer account
+    * @param _queryId id of reported data
+    * @param _timestamp id or reported data
+    * @return bool rewardClaimed
+    */
+    function getRewardClaimedStatus(address _payerAddress, bytes32 _queryId, uint256 _timestamp) external view returns (bool){
+        return payers[_payerAddress][_queryId].rewardClaimed[_timestamp];
+    }
+
+    /**
      * @dev Internal function which allows Tellor reporters to claim their tips
      * @param _payerAddress address of payer account
      * @param _queryId id of reported data

@@ -339,6 +339,16 @@ contract TellorPlayground {
         return _totalSupply;
     }
 
+    /**
+     * @dev Returns the reporter for a given timestamp and queryId
+     * @param _queryId bytes32 version of the queryId
+     * @param _timestamp uint256 timestamp of report
+     * @return address of data reporter
+    */
+    function getReporterByTimestamp(bytes32 _queryId, uint256 _timestamp) external view returns (address) {
+        return reporterByTimestamp[_queryId][_timestamp];
+    }
+
     // Internal functions
     /**
      * @dev Internal function to approve tokens for the user
