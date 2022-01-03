@@ -14,7 +14,7 @@ import "./interfaces/IERC20.sol";
 contract Autopay is UsingTellor {
     mapping(address => mapping(bytes32 => Payer)) public payers; // payer address => queryId => Payer
     ITellor public master; // Tellor contract address
-
+  
     struct Payer {
         address token; // token used for tipping
         uint256 reward; // amount paid for each eligible data submission
@@ -174,7 +174,7 @@ contract Autopay is UsingTellor {
         uint256 _c = _payer.startTime + _payer.interval * _n; // finds timestamp _c of interval _n
         require(_timestamp - _c < _payer.window, "timestamp not within window");
         (, , uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
-        require(_timestampBefore < _c, "timestamp not first within window");
+        require(_timestampBefore < _c, "timestamp not first report within window");
         uint256 _rewardAmount;
         if (_payer.balance >= _payer.reward) {
             _rewardAmount = _payer.reward;
