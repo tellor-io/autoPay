@@ -15,6 +15,7 @@ describe("Autopay - function tests", function () {
   let badArray = [];
   let payerBefore;
   const QUERYID1 = h.uintTob32(1);
+  const QUERYID2 = h.uintTob32(2);
 
   beforeEach(async function () {
     accounts = await ethers.getSigners();
@@ -213,5 +214,58 @@ describe("Autopay - function tests", function () {
         expect(claimedStatus).to.be.true;
       });
     });
+  });
+
+  describe("public claimTip function", () => {
+    describe("ERC20 Token transfer", () => {
+      it("properly updates the reporters balance with the ERC20 token reward", async () => {
+        await autopay.claimTip(accounts[0].address, QUERYID1, array[0]);
+        expect(await token.balanceOf(accounts[1].address)).to.equal(
+          h.toWei("1")
+        );
+      });
+      it("properly updates the balance of the Autopay contract", async () => {
+        await autopay.claimTip(accounts[0].address, QUERYID1, array[0]);
+        expect(await token.balanceOf(autopay.address)).to.equal(
+          h.toWei("999999")
+        );
+      });
+    });
+  });
+
+  //Now Testing setupPayer and fillPayer functions
+  describe("setupPayer function", () => {
+    describe("require statements", () => {
+      let result;
+      it("checks if payer balance is zero during setupPayer process", async () => {
+        result = await h.expectThrowMessage(
+          autopay.setupPayer(
+            token.address,
+            QUERYID1,
+            h.toWei("1"),
+            blocky.timestamp,
+            3600,
+            600,
+            600
+          )
+        );
+        assert.include(result.message, "payer balance must be zero");
+      });
+      it("checks if someone tries to initialize a zero reward", async () => {
+        result = await h.expectThrowMessage(
+          autopay.setupPayer(
+            token.address,
+            QUERYID2,
+            h.toWei("0"),
+            blocky.timestamp,
+            3600,
+            600,
+            600
+          )
+        );
+        assert.include(result.message, "reward must be greater than zero");
+      });
+    });
+    describe("variable updates", () => {});
   });
 });

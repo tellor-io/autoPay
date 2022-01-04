@@ -46,7 +46,7 @@ contract Autopay is UsingTellor {
         address _payerAddress,
         bytes32 _queryId,
         uint256[] memory _timestamps
-    ) public {
+    ) external {
         address _reporterAtTimestamp;
         uint256 _reward;
         uint256 _cumulativeReward;
@@ -76,7 +76,7 @@ contract Autopay is UsingTellor {
         address _payerAddress,
         bytes32 _queryId,
         uint256 _timestamp
-    ) public {
+    ) external {
         (address _reporter, uint256 _reward) = _claimTip(
             _payerAddress,
             _queryId,
@@ -98,7 +98,7 @@ contract Autopay is UsingTellor {
         address _payerAddress,
         bytes32 _queryId,
         uint256 _amount
-    ) public {
+    ) external {
         Payer storage _payer = payers[_payerAddress][_queryId];
         require(_payer.reward > 0, "payer not set up");
         require(
@@ -131,7 +131,7 @@ contract Autopay is UsingTellor {
         uint256 _interval,
         uint256 _window,
         uint256 _buffer
-    ) public {
+    ) external {
         Payer storage _payer = payers[msg.sender][_queryId];
         require(_payer.balance == 0, "payer balance must be zero to set up");
         require(_reward > 0, "reward must be greater than zero");
@@ -187,7 +187,7 @@ contract Autopay is UsingTellor {
         address _payerAddress,
         bytes32 _queryId,
         uint256 _timestamp
-    ) public returns (address, uint256) {
+    ) internal returns (address, uint256) {
         Payer storage _payer = payers[_payerAddress][_queryId];
         require(_payer.balance > 0, "insufficient payer balance");
         require(!_payer.rewardClaimed[_timestamp], "reward already claimed");
