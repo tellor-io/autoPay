@@ -44,8 +44,10 @@ describe("Autopay - function tests", function () {
       firstBlocky.timestamp,
       3600,
       600,
-      600
+      600,
+      '0x'
     );
+
     //Approving token amount
     await token.approve(autopay.address, h.toWei("1000000"));
     //Filling Payer balance
@@ -127,6 +129,7 @@ describe("Autopay - function tests", function () {
     describe("require statement checks", () => {
       let result;
       it("checks if payer balance is above 0", async () => {
+
         await autopay
           .connect(accounts[10])
           .setupPayer(
@@ -136,8 +139,10 @@ describe("Autopay - function tests", function () {
             blocky.timestamp,
             3600,
             600,
-            600
-          );
+            600,
+            '0x'
+          )
+
         await h.expectThrow(
           autopay.claimTip(accounts[10].address, QUERYID1, blocky.timestamp)
         );
@@ -232,6 +237,9 @@ describe("Autopay - function tests", function () {
         );
       });
     });
+    describe("event checks", () => {
+
+    })
   });
 
   //Now testing setupPayer function
@@ -247,7 +255,8 @@ describe("Autopay - function tests", function () {
             blocky.timestamp,
             3600,
             600,
-            600
+            600,
+            '0x'
           )
         );
         assert.include(result.message, "payer balance must be zero");
@@ -261,7 +270,8 @@ describe("Autopay - function tests", function () {
             blocky.timestamp,
             3600,
             600,
-            600
+            600,
+            '0x'
           )
         );
         assert.include(result.message, "reward must be greater than zero");
@@ -275,7 +285,8 @@ describe("Autopay - function tests", function () {
             blocky.timestamp,
             600,
             3600,
-            600
+            600,
+            '0x'
           )
         );
         assert.include(
@@ -297,6 +308,22 @@ describe("Autopay - function tests", function () {
         expect(result[6]).to.equal(600);
       });
     });
+    describe("event checks", () => {
+      it("checks if NewPayerAccount event is emitted correctly", async () => {
+        await expect(autopay
+          .connect(accounts[10])
+          .setupPayer(
+            token.address,
+            QUERYID1,
+            h.toWei("1"),
+            blocky.timestamp,
+            3600,
+            600,
+            600,
+            '0x'
+          )).to.emit(autopay, 'NewPayerAccount').withArgs(accounts[10].address, QUERYID1, '0x');
+      })
+    })
   });
 
   //Now testing fillPayer function

@@ -14,7 +14,7 @@ import "./interfaces/IERC20.sol";
 contract Autopay is UsingTellor {
     mapping(address => mapping(bytes32 => Payer)) public payers; // payer address => queryId => Payer
     ITellor public master; // Tellor contract address
-  
+
     struct Payer {
         address token; // token used for tipping
         uint256 reward; // amount paid for each eligible data submission
@@ -25,6 +25,25 @@ contract Autopay is UsingTellor {
         uint256 buffer; // wait time after data submitted before tip can be claimed
         mapping(uint256 => bool) rewardClaimed; // tracks which tips were already paid out
     }
+
+    // Events
+    event NewPayerAccount(
+        address _payerAddress,
+        bytes32 _queryId,
+        bytes _queryData
+    );
+    event PayerAccountFilled(
+        address _payerAddress,
+        bytes32 _queryId,
+        address _token,
+        uint256 _amount
+    );
+    event TipClaimed(
+        address _payerAddress,
+        bytes32 _queryId,
+        address _token,
+        uint256 _amount
+    );
 
     /**
      * @dev Initializes system parameters
@@ -64,6 +83,12 @@ contract Autopay is UsingTellor {
             _reporter,
             _cumulativeReward
         );
+        emit TipClaimed(
+            _payerAddress,
+            _queryId,
+            payers[_payerAddress][_queryId].token,
+            _cumulativeReward
+        );
     }
 
     /**
@@ -84,6 +109,12 @@ contract Autopay is UsingTellor {
         );
         IERC20(payers[_payerAddress][_queryId].token).transfer(
             _reporter,
+            _reward
+        );
+        emit TipClaimed(
+            _payerAddress,
+            _queryId,
+            payers[_payerAddress][_queryId].token,
             _reward
         );
     }
@@ -110,6 +141,12 @@ contract Autopay is UsingTellor {
             "ERC20: transfer amount exceeds balance"
         );
         _payer.balance += _amount;
+        emit PayerAccountFilled(
+            _payerAddress,
+            _queryId,
+            payers[_payerAddress][_queryId].token,
+            _amount
+        );
     }
 
     /**
@@ -130,8 +167,13 @@ contract Autopay is UsingTellor {
         uint256 _startTime,
         uint256 _interval,
         uint256 _window,
-        uint256 _buffer
+        uint256 _buffer,
+        bytes memory _queryData
     ) external {
+        require(
+            _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
+            "id must be hash of bytes data"
+        );
         Payer storage _payer = payers[msg.sender][_queryId];
         require(_payer.balance == 0, "payer balance must be zero to set up");
         require(_reward > 0, "reward must be greater than zero");
@@ -145,33 +187,58 @@ contract Autopay is UsingTellor {
         _payer.interval = _interval;
         _payer.window = _window;
         _payer.buffer = _buffer;
+        emit NewPayerAccount(msg.sender, _queryId, _queryData);
     }
 
     /**
-    * @dev Getter function to read a specific payer struct
-    * @param _payerAddress address of payer account
-    * @param _queryId id of reported data
-    * @return address token
-    * @return uint256 reward
-    * @return uint256 balance
-    * @return uint256 startTime
-    * @return uint256 interval
-    * @return uint256 window
-    * @return uint256 buffer
-    */
-    function getPayer(address _payerAddress, bytes32 _queryId) external view returns (address, uint256, uint256, uint256, uint256, uint256, uint256){
+     * @dev Getter function to read a specific payer struct
+     * @param _payerAddress address of payer account
+     * @param _queryId id of reported data
+     * @return address token
+     * @return uint256 reward
+     * @return uint256 balance
+     * @return uint256 startTime
+     * @return uint256 interval
+     * @return uint256 window
+     * @return uint256 buffer
+     */
+    function getPayer(address _payerAddress, bytes32 _queryId)
+        external
+        view
+        returns (
+            address,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256,
+            uint256
+        )
+    {
         Payer storage _payer = payers[_payerAddress][_queryId];
-        return (_payer.token, _payer.reward, _payer.balance, _payer.startTime, _payer.interval, _payer.window, _payer.buffer);
+        return (
+            _payer.token,
+            _payer.reward,
+            _payer.balance,
+            _payer.startTime,
+            _payer.interval,
+            _payer.window,
+            _payer.buffer
+        );
     }
 
     /**
-    * @dev Getter function to read if a reward has been claimed
-    * @param _payerAddress address of payer account
-    * @param _queryId id of reported data
-    * @param _timestamp id or reported data
-    * @return bool rewardClaimed
-    */
-    function getRewardClaimedStatus(address _payerAddress, bytes32 _queryId, uint256 _timestamp) external view returns (bool){
+     * @dev Getter function to read if a reward has been claimed
+     * @param _payerAddress address of payer account
+     * @param _queryId id of reported data
+     * @param _timestamp id or reported data
+     * @return bool rewardClaimed
+     */
+    function getRewardClaimedStatus(
+        address _payerAddress,
+        bytes32 _queryId,
+        uint256 _timestamp
+    ) external view returns (bool) {
         return payers[_payerAddress][_queryId].rewardClaimed[_timestamp];
     }
 
@@ -202,7 +269,10 @@ contract Autopay is UsingTellor {
         uint256 _c = _payer.startTime + _payer.interval * _n; // finds timestamp _c of interval _n
         require(_timestamp - _c < _payer.window, "timestamp not within window");
         (, , uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
-        require(_timestampBefore < _c, "timestamp not first report within window");
+        require(
+            _timestampBefore < _c,
+            "timestamp not first report within window"
+        );
         uint256 _rewardAmount;
         if (_payer.balance >= _payer.reward) {
             _rewardAmount = _payer.reward;
