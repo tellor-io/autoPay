@@ -10,6 +10,7 @@ describe("Autopay - function tests", function () {
   let autopay;
   let accounts;
   let token;
+  let firstBlocky;
   let blocky;
   let array = [];
   let badArray = [];
@@ -34,13 +35,13 @@ describe("Autopay - function tests", function () {
     //Minting 1000000 tokens
     await token.mint(accounts[0].address, h.toWei("1000000"));
     //Setting up a block to interact with
-    blocky = await h.getBlock();
+    firstBlocky = await h.getBlock();
     //Setup Payers to interact with
     await autopay.setupPayer(
       token.address,
       QUERYID1,
       h.toWei("1"),
-      blocky.timestamp,
+      firstBlocky.timestamp,
       3600,
       600,
       600
@@ -233,7 +234,7 @@ describe("Autopay - function tests", function () {
     });
   });
 
-  //Now Testing setupPayer and fillPayer functions
+  //Now testing setupPayer function
   describe("setupPayer function", () => {
     describe("require statements", () => {
       let result;
@@ -265,7 +266,105 @@ describe("Autopay - function tests", function () {
         );
         assert.include(result.message, "reward must be greater than zero");
       });
+      it("checks if window is less than interval", async () => {
+        result = await h.expectThrowMessage(
+          autopay.setupPayer(
+            token.address,
+            QUERYID2,
+            h.toWei("1"),
+            blocky.timestamp,
+            600,
+            3600,
+            600
+          )
+        );
+        assert.include(
+          result.message,
+          "window must be less than interval length"
+        );
+      });
     });
-    describe("variable updates", () => {});
+    describe("variable updates", () => {
+      let result;
+      it("checks if payer struct is updated correctly after setupPayer is called", async () => {
+        result = await autopay.getPayer(accounts[0].address, QUERYID1);
+        expect(result[0]).to.equal(token.address);
+        expect(result[1]).to.equal(h.toWei("1"));
+        expect(result[2]).to.equal(h.toWei("1000000"));
+        expect(result[3]).to.equal(firstBlocky.timestamp);
+        expect(result[4]).to.equal(3600);
+        expect(result[5]).to.equal(600);
+        expect(result[6]).to.equal(600);
+      });
+    });
+  });
+
+  //Now testing fillPayer function
+  describe("fillPayer function", () => {
+    describe("require statements", () => {
+      let result;
+      it("checks if payer is set up or not", async () => {
+        result = await h.expectThrowMessage(
+          autopay.fillPayer(accounts[3].address, QUERYID1, h.toWei("100000"))
+        );
+        assert.include(result.message, "payer not set up");
+      });
+      it("checks if msg.sender has enough ERC20 tokens to fillPayer", async () => {
+        result = await h.expectThrowMessage(
+          autopay.fillPayer(accounts[0].address, QUERYID1, h.toWei("100"))
+        );
+        assert.include(
+          result.message,
+          "ERC20: transfer amount exceeds balance"
+        );
+      });
+    });
+    describe("variable updates", () => {
+      let result;
+      it("increases payer balance by amount specified at function call", async () => {
+        //mint
+        await token.mint(accounts[0].address, h.toWei("1000"));
+        //aprrove
+        await token.approve(autopay.address, h.toWei("1000"));
+        //fill
+        await autopay.fillPayer(accounts[0].address, QUERYID1, h.toWei("10"));
+        //check if balance was updated
+        result = await autopay.getPayer(accounts[0].address, QUERYID1);
+        expect(result[2]).to.equal(h.toWei("1000010"));
+      });
+    });
+  });
+
+  //Testing getters
+  describe("getPayer function", () => {
+    let result;
+    it("checks if getPayer retrieves the proper values", async () => {
+      result = await autopay.getPayer(accounts[0].address, QUERYID1);
+      expect(result[0]).to.equal(token.address);
+      expect(result[1]).to.equal(h.toWei("1"));
+      expect(result[2]).to.equal(h.toWei("1000000"));
+      expect(result[3]).to.equal(firstBlocky.timestamp);
+      expect(result[4]).to.equal(3600);
+      expect(result[5]).to.equal(600);
+      expect(result[6]).to.equal(600);
+    });
+  });
+  describe("getRewardClaimedStatus function", () => {
+    let result;
+    it("checks if getRewardClaimedStatus retrieves the proper value", async () => {
+      result = await autopay.getRewardClaimedStatus(
+        accounts[0].address,
+        QUERYID1,
+        array[0]
+      );
+      expect(result).to.be.false;
+      await autopay.claimTip(accounts[0].address, QUERYID1, array[0]);
+      result = await autopay.getRewardClaimedStatus(
+        accounts[0].address,
+        QUERYID1,
+        array[0]
+      );
+      expect(result).to.be.true;
+    });
   });
 });

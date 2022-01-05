@@ -107,7 +107,7 @@ contract Autopay is UsingTellor {
                 address(this),
                 _amount
             ),
-            "insufficient balance"
+            "ERC20: transfer amount exceeds balance"
         );
         _payer.balance += _amount;
     }
@@ -136,8 +136,8 @@ contract Autopay is UsingTellor {
         require(_payer.balance == 0, "payer balance must be zero to set up");
         require(_reward > 0, "reward must be greater than zero");
         require(
-            _window * 2 < _interval,
-            "window must be less than half of interval length"
+            _window < _interval,
+            "window must be less than interval length"
         );
         _payer.token = _token;
         _payer.reward = _reward;
@@ -213,19 +213,5 @@ contract Autopay is UsingTellor {
         }
         _payer.rewardClaimed[_timestamp] = true;
         return (_reporter, _rewardAmount);
-    }
-
-    /**
-     * @dev Internal function used to find the absolute difference between two uints
-     * @param _a first uint
-     * @param _b second uint
-     * @return uint absolute difference between _a and _b
-     */
-    function _diff(uint256 _a, uint256 _b) internal pure returns (uint256) {
-        if (_a >= _b) {
-            return _a - _b;
-        } else {
-            return _b - _a;
-        }
     }
 }
