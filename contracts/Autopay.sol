@@ -14,6 +14,8 @@ import "./interfaces/IERC20.sol";
 contract Autopay is UsingTellor {
     mapping(address => mapping(bytes32 => Payer)) public payers; // payer address => queryId => Payer
     ITellor public master; // Tellor contract address
+    address public owner;
+    uint256 public fee; ///1000 is 100%, 50 is 5%, etc.
 
     struct Payer {
         address token; // token used for tipping
@@ -49,8 +51,10 @@ contract Autopay is UsingTellor {
      * @dev Initializes system parameters
      * @param _tellor address of Tellor contract
      */
-    constructor(address payable _tellor) UsingTellor(_tellor) {
+    constructor(address payable _tellor, address _owner,uint256 _fee) UsingTellor(_tellor) {
         master = ITellor(_tellor);
+        owner = _owner;
+        fee = _fee;
     }
 
     /**
@@ -81,7 +85,11 @@ contract Autopay is UsingTellor {
         }
         IERC20(payers[_payerAddress][_queryId].token).transfer(
             _reporter,
-            _cumulativeReward
+            (_cumulativeReward * (1000-fee))/1000
+        );
+        IERC20(payers[_payerAddress][_queryId].token).transfer(
+            owner,
+            (_cumulativeReward * fee)/1000
         );
         emit TipClaimed(
             _payerAddress,
