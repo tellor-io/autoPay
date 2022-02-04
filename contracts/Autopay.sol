@@ -15,7 +15,9 @@ contract Autopay is UsingTellor {
     mapping(address => mapping(bytes32 => Payer)) public payers; // payer address => queryId => Payer
     ITellor public master; // Tellor contract address
     address public owner;
-    uint256 public fee; ///1000 is 100%, 50 is 5%, etc.
+    uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
+
+    mapping(bytes32 => mapping(address => uint256)) tips;
 
     struct Payer {
         address token; // token used for tipping
@@ -24,28 +26,19 @@ contract Autopay is UsingTellor {
         uint256 startTime; // time of first payment window
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
-        uint256 buffer; // wait time after data submitted before tip can be claimed
         mapping(uint256 => bool) rewardClaimed; // tracks which tips were already paid out
     }
 
     // Events
-    event NewPayerAccount(
-        address _payerAddress,
-        bytes32 _queryId,
-        bytes _queryData
-    );
+    event NewPayerAccount(address _payerAddress,bytes32 _queryId,bytes _queryData);
     event PayerAccountFilled(
         address _payerAddress,
         bytes32 _queryId,
         address _token,
         uint256 _amount
     );
-    event TipClaimed(
-        address _payerAddress,
-        bytes32 _queryId,
-        address _token,
-        uint256 _amount
-    );
+    event TipAdded(address _token, bytes32 _queryId,uint256 _amount);
+    event TipClaimed(address _payerAddress,bytes32 _queryId,address _token,uint256 _amount);
 
     /**
      * @dev Initializes system parameters
@@ -64,7 +57,7 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @param _timestamps[] timestamps array of reported data eligible for reward
      */
-    function batchClaimTip(
+    function claimTip(
         address _reporter,
         address _payerAddress,
         bytes32 _queryId,
@@ -72,8 +65,7 @@ contract Autopay is UsingTellor {
     ) external {
         address _reporterAtTimestamp;
         uint256 _reward;
-        uint256 _cumulativeReward;
-
+        uint256  _cumulativeReward;
         for (uint256 i = 0; i < _timestamps.length; i++) {
             (_reporterAtTimestamp, _reward) = _claimTip(
                 _payerAddress,
@@ -82,6 +74,10 @@ contract Autopay is UsingTellor {
             );
             require(_reporterAtTimestamp == _reporter, "reporter mismatch");
             _cumulativeReward += _reward;
+        }
+        if(tips[_queryId][payers[_payerAddress][_queryId].token] > 0){
+            _cumulativeReward += tips[_queryId][payers[_payerAddress][_queryId].token];
+            tips[_queryId][payers[_payerAddress][_queryId].token] = 0;
         }
         IERC20(payers[_payerAddress][_queryId].token).transfer(
             _reporter,
@@ -100,44 +96,12 @@ contract Autopay is UsingTellor {
     }
 
     /**
-     * @dev Allows Tellor reporters to claim their tips
-     * @param _payerAddress address of payer account
-     * @param _queryId id of reported data
-     * @param _timestamp timestamp of reported data eligible for reward
-     */
-    function claimTip(
-        address _payerAddress,
-        bytes32 _queryId,
-        uint256 _timestamp
-    ) external {
-        (address _reporter, uint256 _reward) = _claimTip(
-            _payerAddress,
-            _queryId,
-            _timestamp
-        );
-        IERC20(payers[_payerAddress][_queryId].token).transfer(
-            _reporter,
-            _reward
-        );
-        emit TipClaimed(
-            _payerAddress,
-            _queryId,
-            payers[_payerAddress][_queryId].token,
-            _reward
-        );
-    }
-
-    /**
      * @dev Allows payer account to be filled with tokens
      * @param _payerAddress address of payer account
      * @param _queryId id of reported data associated with payer account
      * @param _amount quantity of tokens to fund payer account
      */
-    function fillPayer(
-        address _payerAddress,
-        bytes32 _queryId,
-        uint256 _amount
-    ) external {
+    function fillPayer(address _payerAddress,bytes32 _queryId,uint256 _amount) external {
         Payer storage _payer = payers[_payerAddress][_queryId];
         require(_payer.reward > 0, "payer not set up");
         require(
@@ -166,7 +130,6 @@ contract Autopay is UsingTellor {
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
      * @param _window amount of time after each new interval when reports are eligible for tips
-     * @param _buffer amount of time after report submitted before tip can be claimed
      */
     function setupPayer(
         address _token,
@@ -175,7 +138,6 @@ contract Autopay is UsingTellor {
         uint256 _startTime,
         uint256 _interval,
         uint256 _window,
-        uint256 _buffer,
         bytes memory _queryData
     ) external {
         require(
@@ -194,8 +156,20 @@ contract Autopay is UsingTellor {
         _payer.startTime = _startTime;
         _payer.interval = _interval;
         _payer.window = _window;
-        _payer.buffer = _buffer;
         emit NewPayerAccount(msg.sender, _queryId, _queryData);
+    }
+
+    function tip(address _token,bytes32 _queryId,uint256 _amount) external{
+        require(
+            IERC20(_token).transferFrom(
+                msg.sender,
+                address(this),
+                _amount
+            ),
+            "ERC20: transfer amount exceeds balance"
+        );
+        tips[_queryId][_token] += _amount;
+        emit TipAdded(_token,_queryId,_amount);
     }
 
     /**
@@ -208,14 +182,12 @@ contract Autopay is UsingTellor {
      * @return uint256 startTime
      * @return uint256 interval
      * @return uint256 window
-     * @return uint256 buffer
      */
     function getPayer(address _payerAddress, bytes32 _queryId)
         external
         view
         returns (
             address,
-            uint256,
             uint256,
             uint256,
             uint256,
@@ -230,8 +202,7 @@ contract Autopay is UsingTellor {
             _payer.balance,
             _payer.startTime,
             _payer.interval,
-            _payer.window,
-            _payer.buffer
+            _payer.window
         );
     }
 
@@ -266,10 +237,7 @@ contract Autopay is UsingTellor {
         Payer storage _payer = payers[_payerAddress][_queryId];
         require(_payer.balance > 0, "insufficient payer balance");
         require(!_payer.rewardClaimed[_timestamp], "reward already claimed");
-        require(
-            block.timestamp - _timestamp > _payer.buffer,
-            "buffer time has not passed"
-        );
+        require(block.timestamp - _timestamp > 12 hours,"buffer time has not passed");
         // ITellor _oracle = ITellor(master.addresses(keccak256(abi.encode("_ORACLE_CONTRACT")))); // use this for tellorX
         address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
         require(_reporter != address(0), "no value exists at timestamp");

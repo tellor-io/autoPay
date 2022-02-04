@@ -20,13 +20,11 @@ describe("Autopay - function tests", function () {
 
   beforeEach(async function () {
     accounts = await ethers.getSigners();
-    const TellorPlayground = await ethers.getContractFactory(
-      "TellorPlayground"
-    );
+    const TellorPlayground = await ethers.getContractFactory("TellorPlayground");
     tellor = await TellorPlayground.deploy();
     await tellor.deployed();
     const Autopay = await ethers.getContractFactory("Autopay");
-    autopay = await Autopay.deploy(tellor.address);
+    autopay = await Autopay.deploy(tellor.address,accounts[0].address,10);
     await autopay.deployed();
     //Instantiating a Token to interact with
     const Token = await ethers.getContractFactory("TestToken");
