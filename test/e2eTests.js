@@ -53,10 +53,20 @@ describe("Autopay - e2e tests", function () {
       array[2] = blocky.timestamp;
     });
     describe("multiple queryID's, refills, pulls", () => {
-        //setupPayer
-        //mine 10 values
-        //tip more
-        //mine more
+        await token.mint(accounts[1].address, h.toWei("100"));
+        ownerBalance = await token.balanceOf(accounts[0].address)
+        reporterBalance = await token.balanceOf(accounts[2].address)
+        await autopay.connect(accounts[1]).setupPayer(token.address,QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,'0x');
+        await token.approve(autopay.address, h.toWei("1000000"));
+        await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
+        for(i=0;i<10;i++){
+            await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575+i), 0, "0x");
+        }
+        await token.approve(autopay.address, h.toWei("1000000"));
+        await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
+        for(i=0;i<10;i++){
+            await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575+i), 0, "0x");
+        }
         //withdraw funds and check that correct
         //single tip
         //more add funds
@@ -73,5 +83,3 @@ describe("Autopay - e2e tests", function () {
         assert(0 ==1)
     });
 });
-    });
-    
