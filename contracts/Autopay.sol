@@ -16,8 +16,8 @@ contract Autopay is UsingTellor {
     address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
-    mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed;//mapping queryID to dataFeedID to details
-    mapping(bytes32 => FeedDetails[]) currentFeeds;
+    mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryID to dataFeedID to details
+    mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryID to dataFeedIDs array
     mapping(bytes32 => mapping(address => uint256)) tips;
 
     struct FeedDetails {
@@ -82,7 +82,7 @@ contract Autopay is UsingTellor {
         }
         IERC20(_feed.token).transfer(
             _reporter,
-            (_cumulativeReward * (1000-fee))/1000
+            _cumulativeReward - ((_cumulativeReward * fee)/1000)
         );
         IERC20(_feed.token).transfer(
             owner,
@@ -147,7 +147,7 @@ contract Autopay is UsingTellor {
         _feed.startTime = _startTime;
         _feed.interval = _interval;
         _feed.window = _window;
-        currentFeeds[_queryId].push(_feed);
+        currentFeeds[_queryId].push(_feedId);
         emit NewDataFeed(_token, _queryId, _feedId, _queryData);
     }
 
@@ -164,7 +164,7 @@ contract Autopay is UsingTellor {
         emit TipAdded(_token,_queryId,_amount);
     }
 
-    function getCurrentFeeds(bytes32 _queryId) external view returns(FeedDetails[] memory){
+    function getCurrentFeeds(bytes32 _queryId) external view returns(bytes32[] memory){
         return currentFeeds[_queryId];
     }
 
@@ -172,34 +172,14 @@ contract Autopay is UsingTellor {
      * @dev Getter function to read a specific dataFeed
      * @param _feedId unique feedId of parameters
      * @param _queryId id of reported data
-     * @return address token
-     * @return uint256 reward
-     * @return uint256 balance
-     * @return uint256 startTime
-     * @return uint256 interval
-     * @return uint256 window
+     * @return FeedDetails details of specified feed
      */
     function getDataFeed(bytes32 _feedId, bytes32 _queryId)
         external
         view
-        returns (
-            address,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            uint256
-        )
+        returns (FeedDetails memory)
     {
-        FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
-        return (
-            _feed.token,
-            _feed.reward,
-            _feed.balance,
-            _feed.startTime,
-            _feed.interval,
-            _feed.window
-        );
+        return (dataFeed[_queryId][_feedId].details);
     }
 
     /**
