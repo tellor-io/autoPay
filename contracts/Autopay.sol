@@ -18,7 +18,7 @@ contract Autopay is UsingTellor {
 
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryID to dataFeedID to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryID to dataFeedIDs array
-    mapping(bytes32 => mapping(address => uint256)) tips;
+    mapping(bytes32 => mapping(address => Tip[])) public tips; // mapping queryID to token address to tips
 
     struct FeedDetails {
         address token; // token used for tipping
@@ -32,6 +32,11 @@ contract Autopay is UsingTellor {
     struct Feed{
         FeedDetails details;
         mapping(uint256 => bool) rewardClaimed; // tracks which tips were already paid out
+    }
+
+    struct Tip {
+      uint256 amount;
+      uint256 timestamp;
     }
 
     // Events
@@ -76,10 +81,10 @@ contract Autopay is UsingTellor {
             require(_reporterAtTimestamp == _reporter, "reporter mismatch");
             _cumulativeReward += _reward;
         }
-        if(tips[_queryId][_feed.token] > 0){
-            _cumulativeReward += tips[_queryId][_feed.token];
-            tips[_queryId][_feed.token] = 0;
-        }
+        // if(tips[_queryId][_feed.token] > 0){
+        //     _cumulativeReward += tips[_queryId][_feed.token];
+        //     tips[_queryId][_feed.token] = 0;
+        // }
         IERC20(_feed.token).transfer(
             _reporter,
             _cumulativeReward - ((_cumulativeReward * fee)/1000)
@@ -151,7 +156,7 @@ contract Autopay is UsingTellor {
         emit NewDataFeed(_token, _queryId, _feedId, _queryData);
     }
 
-    function tip(address _token,bytes32 _queryId,uint256 _amount) external{
+    function tip(address _token,bytes32 _queryId,uint256 _amount) external {
         require(
             IERC20(_token).transferFrom(
                 msg.sender,
@@ -160,8 +165,46 @@ contract Autopay is UsingTellor {
             ),
             "ERC20: transfer amount exceeds balance"
         );
-        tips[_queryId][_token] += _amount;
+        Tip[] storage _tips = tips[_queryId][_token];
+        if (_tips.length == 0) {
+            _tips.push(Tip(_amount, block.timestamp));
+        } else {
+            (,, uint256 _timestampRetrieved) = getCurrentValue(_queryId);
+            if (_timestampRetrieved < _tips[_tips.length - 1].timestamp) {
+                _tips[_tips.length - 1].timestamp = block.timestamp;
+                _tips[_tips.length - 1].amount += _amount;
+            } else {
+                _tips.push(Tip(_amount, block.timestamp));
+            }
+        }
         emit TipAdded(_token,_queryId,_amount);
+    }
+
+    function claimOneTimeTip(address _token, bytes32 _queryId, uint256 _timestamp) external {
+        Tip[] storage _tips = tips[_queryId][_token];
+        require(_tips.length > 0, "No tips submitted for this token and queryId");
+        address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
+        require(msg.sender == _reporter, "Message sender not reporter for given queryId and timestamp");
+        uint256 _min;
+        uint256 _max = _tips.length;
+        uint256 _mid;
+
+        while(_max - _min > 1) {
+            _mid = (_max + _min) / 2;
+            if(_tips[_mid].timestamp > _timestamp) {
+                _max = _mid;
+            } else {
+                _min = _mid;
+            }
+        }
+
+        (,, uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
+        require(_timestampBefore < _tips[_min].timestamp, "Tip earned by previous submission");
+        require(_timestamp > _tips[_min].timestamp, "Timestamp not eligible for tip");
+        require(_tips[_min].amount > 0, "Tip already claimed");
+        uint256 _tipAmount = _tips[_min].amount;
+        _tips[_min].amount = 0;
+        IERC20(_token).transfer(_reporter, _tipAmount);
     }
 
     function getCurrentFeeds(bytes32 _queryId) external view returns(bytes32[] memory){
@@ -197,8 +240,18 @@ contract Autopay is UsingTellor {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
     }
 
-    function getTips(bytes32 _queryData, address _token) external view returns(uint256){
-        return tips[_queryData][_token];
+    function getCurrentTip(bytes32 _queryId, address _token) external view returns(uint256){
+        (,, uint256 _timestampRetrieved) = getCurrentValue(_queryId);
+        Tip memory _lastTip = tips[_queryId][_token][tips[_queryId][_token].length - 1];
+        if (_timestampRetrieved < _lastTip.timestamp) {
+          return _lastTip.amount;
+        } else {
+          return 0;
+        }
+    }
+
+    function getPastTips(bytes32 _queryId, address _token) external view returns(Tip[] memory) {
+        return tips[_queryId][_token];
     }
 
     /**
