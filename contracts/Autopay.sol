@@ -324,8 +324,8 @@ contract Autopay is UsingTellor {
             "buffer time has not passed"
         );
         // ITellor _oracle = ITellor(master.addresses(keccak256(abi.encode("_ORACLE_CONTRACT")))); // use this for tellorX
-        address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
-        require(_reporter != address(0), "no value exists at timestamp");
+        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
+        require(keccak256(_valueRetrieved) != keccak256(bytes('')), "no value exists at timestamp");
         uint256 _n = (_timestamp - _feed.details.startTime) /
             _feed.details.interval; // finds closest interval _n to timestamp
         uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds timestamp _c of interval _n
@@ -347,6 +347,7 @@ contract Autopay is UsingTellor {
             _feed.details.balance = 0;
         }
         _feed.rewardClaimed[_timestamp] = true;
+        address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
         return (_reporter, _rewardAmount);
     }
 

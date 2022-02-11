@@ -98,6 +98,40 @@ describe("Autopay - e2e tests", function() {
     assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be correct")
   })
 
+  it("multiple queryID's, refills, pulls", async function() {
+    // await token.mint(accounts[1].address, h.toWei("100"));
+    ownerBalance = await token.balanceOf(accounts[0].address)
+    reporterBalance = await token.balanceOf(accounts[2].address)
+    blocky = await h.getBlock()
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, h.toWei("1"), blocky.timestamp, 36000, 6000, '0x');
+    abiCoder = new ethers.utils.AbiCoder
+    feedId = feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, h.toWei("1"), blocky.timestamp, 3600, 600]))
+    await token.approve(autopay.address, h.toWei("1000000"));
+    // await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
+    // for (i = 0; i < 10; i++) {
+    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
+    //   blocky = await h.getBlock()
+    // }
+
+
+    // submit 10 values for queryId 1
+    // skip a bunch of time.
+    // submit
+    // await token.approve(autopay.address, h.toWei("1000000"));
+    // await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
+    // for (i = 0; i < 10; i++) {
+    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
+    // }
+
+
+
+    //withdraw funds and check that correct
+    //single tip
+    //more add funds
+    //withdraw
+    //assure fee taken is correct
+  });
+
   it("single queryID, multiple refills, pulls", async function() {
     interval1 = 36000
     window1 = 6000
@@ -298,41 +332,7 @@ describe("Autopay - e2e tests", function() {
     for (i = 0; i < 3; i++) {
       await h.expectThrow(autopay.claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])) // value with given timestamp doesn't exist
     }
-    // claim tip for undisputed valid value
+    // claim tip for indisputed value
     await autopay.claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[3].timestamp])
-  });
-
-  it("multiple queryID's, refills, pulls", async function() {
-    // await token.mint(accounts[1].address, h.toWei("100"));
-    ownerBalance = await token.balanceOf(accounts[0].address)
-    reporterBalance = await token.balanceOf(accounts[2].address)
-    blocky = await h.getBlock()
-    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, h.toWei("1"), blocky.timestamp, 36000, 6000, '0x');
-    abiCoder = new ethers.utils.AbiCoder
-    feedId = feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, h.toWei("1"), blocky.timestamp, 3600, 600]))
-    await token.approve(autopay.address, h.toWei("1000000"));
-    // await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
-    // for (i = 0; i < 10; i++) {
-    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
-    //   blocky = await h.getBlock()
-    // }
-
-
-    // submit 10 values for queryId 1
-    // skip a bunch of time.
-    // submit
-    // await token.approve(autopay.address, h.toWei("1000000"));
-    // await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
-    // for (i = 0; i < 10; i++) {
-    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
-    // }
-
-
-
-    //withdraw funds and check that correct
-    //single tip
-    //more add funds
-    //withdraw
-    //assure fee taken is correct
   });
 });
