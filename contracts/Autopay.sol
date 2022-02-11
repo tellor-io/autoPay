@@ -81,10 +81,6 @@ contract Autopay is UsingTellor {
             require(_reporterAtTimestamp == _reporter, "reporter mismatch");
             _cumulativeReward += _reward;
         }
-        // if(tips[_queryId][_feed.token] > 0){
-        //     _cumulativeReward += tips[_queryId][_feed.token];
-        //     tips[_queryId][_feed.token] = 0;
-        // }
         IERC20(_feed.token).transfer(
             _reporter,
             _cumulativeReward - ((_cumulativeReward * fee)/1000)
@@ -177,7 +173,7 @@ contract Autopay is UsingTellor {
                 _tips.push(Tip(_amount, block.timestamp));
             }
         }
-        emit TipAdded(_token,_queryId,_amount);
+        emit TipAdded(_token, _queryId, _amount);
     }
 
     function claimOneTimeTip(address _token, bytes32 _queryId, uint256 _timestamp) external {
@@ -253,6 +249,16 @@ contract Autopay is UsingTellor {
     function getPastTips(bytes32 _queryId, address _token) external view returns(Tip[] memory) {
         return tips[_queryId][_token];
     }
+
+    function getPastTipByIndex(bytes32 _queryId, address _token, uint256 _index) external view returns(Tip memory) {
+      return tips[_queryId][_token][_index];
+    }
+
+    function getPastTipCount(bytes32 _queryId, address _token) external view returns(uint256) {
+      return tips[_queryId][_token].length;
+    }
+
+
 
     /**
      * @dev Internal function which allows Tellor reporters to claim their tips
