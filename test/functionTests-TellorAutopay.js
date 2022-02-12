@@ -136,9 +136,10 @@ describe("Autopay - function tests", () => {
 
   it("Tests setupDataFeed()", async () => {
     let queryIdToUse;
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,"0x"));
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,"0x"));
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,"0x"));
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,"0x",h.toWei("1"),blocky.timestamp,3600,600,"0x"));//must be hash
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,"0x"));//fee is zerio
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,600,600,"0x"));//already set up
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,"0x"));//interval > window
     let result = await autopay.getDataFeed(bytesId, QUERYID1);
     expect(result[0]).to.equal(token.address);
     expect(result[1]).to.equal(h.toWei("1"));
@@ -146,12 +147,54 @@ describe("Autopay - function tests", () => {
     expect(result[3]).to.equal(firstBlocky.timestamp);
     expect(result[4]).to.equal(3600);
     expect(result[5]).to.equal(600);
-    expect(result[6]).to.equal(600);
-    await expect(
-      autopay.connect(accounts[10]).setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,"0x")
-    ).to.emit(autopay, "NewPayerAccount").withArgs(accounts[10].address, QUERYID1, "0x");
   });
-  it("checks if getDataFeed retrieves the proper values", async () => {
+  it("test getRewardClaimedStatus", async () => {
+    let v =  array[0]
+    result = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,v);
+    console.log(result,"h")
+    expect(result).to.be.false;
+    await autopay.claimTip(accounts[0].address,bytesId, QUERYID1, 1*array[0]);
+    result = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,1*array[0]);
+    expect(result).to.be.true;
+  });
+  it("test tip", async () => {
+    await h.expectThrowMessage(autopay.tip(token.address,QUERYID1,web3.utils.toWei("100")));
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    let res = await autopay.getCurrentTip(QUERYID1,token.address);
+    assert(res == web3.utils.toWei("100"), "tip 1nshould be correct")
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    res = await autopay.getCurrentTip(QUERYID1,token.address);
+    assert(res == web3.utils.toWei(200), "tip 2 should be correct")
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    res = await autopay.getCurrentTip(QUERYID1,token.address);
+    assert(res == web3.utils.toWei("300"), "tip 3 should be correct")
+  });
+  it("test claimOneTimeTip", async () => {
+    let startBal = await token.balanceOf(accounts[2].address);
+    await tellor.connect(accounts[4]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    blocky1 = await h.getBlock();
+    await h.expectThrowMessage(autopay.claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//must have tip
+    await token.approve(autopay.address,web3.utils.toWei(100))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei(100))
+    await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//timestamp not elifible
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    blocky = await h.getBlock();
+    await h.expectThrow(autopay.claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//must be the reporter
+    await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    blocky = await h.getBlock();
+    await h.expectThrow(autopay.connect(accounts[3].claimOneTimeTip(token.address,QUERYID1,blocky.timestamp)));//tip earned by previous submission
+    await autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,blocky.timestamp)
+    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//tip already claimed
+    let res = autopay.getCurrentTip(QUERYID1,token.address);
+    assert(res == web3.utils.toWei(300), "tip should be correct")
+    let finBal = await token.balanceOf(accounts[2].address);
+    assert(finBal - startBal == web3.utils.toWei(100), "balance should change correctly")
+  });
+  it("test getDataFeed", async () => {
     result = await autopay.getDataFeed(bytesId, QUERYID1);
     expect(result[0]).to.equal(token.address);
     expect(result[1]).to.equal(h.toWei("1"));
@@ -159,66 +202,80 @@ describe("Autopay - function tests", () => {
     expect(result[3]).to.equal(firstBlocky.timestamp);
     expect(result[4]).to.equal(3600);
     expect(result[5]).to.equal(600);
-    expect(result[6]).to.equal(600);
-  });
-
-  it("test getRewardClaimedStatus", async () => {
-    result = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,array[0]);
-    expect(result).to.be.false;
-    await autopay.claimTip(accounts[0].address, QUERYID1, array[0]);
-    result = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,array[0]);
-    expect(result).to.be.true;
-  });
-  it("test tip", async () => {
-    await h.expectThrowMessage(autopay.tip(token.address,QUERYID1,web3.utils.toWei(100)));
-    await token.approve(autopay.address,web3.utils.toWei(100))
-    await autopay.tip(token.address,QUERYID1,web3.utils.toWei(100))
-    let res = autopay.getCurrentTip(QUERYID1,token.address);
-    assert(res == web3.utils.toWei(100), "tip should be correct")
-    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-    await token.approve(autopay.address,web3.utils.toWei(100))
-    await autopay.tip(token.address,QUERYID1,web3.utils.toWei(100))
-    res = autopay.getCurrentTip(QUERYID1,token.address);
-    assert(res == web3.utils.toWei(200), "tip should be correct")
-    await token.approve(autopay.address,web3.utils.toWei(100))
-    await autopay.tip(token.address,QUERYID1,web3.utils.toWei(100))
-    res = autopay.getCurrentTip(QUERYID1,token.address);
-    assert(res == web3.utils.toWei(300), "tip should be correct")
-  });
-  it("test claimOneTimeTip", async () => {
-    let startBal = await token.balanceOf(accounts[2]);
-    await tellor.connect(accounts[4]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-    blocky1 = await h.getBlock();
-    await h.expectThrowMessage(autopay.claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//must have tip
-    await token.approve(autopay.address,web3.utils.toWei(100))
-    await autopay.tip(token.address,QUERYID1,web3.utils.toWei(100))
-    await h.expectThrowMessage(autopay.connect(accounts[4].claimOneTimeTip(token.address,QUERYID1,blocky.timestamp)));//timestamp not elifible
-    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-    blocky = await h.getBlock();
-    await h.expectThrow(autopay.claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//must be the reporter
-    await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-    blocky = await h.getBlock();
-    await h.expectThrow(autopay.connect(accounts[3].claimOneTimeTip(token.address,QUERYID1,blocky.timestamp)));//tip earned by previous submission
-    await autopay.connect(accounts[2].claimOneTimeTip(token.address,QUERYID1,blocky.timestamp))
-    await h.expectThrow(autopay.connect(accounts[2].claimOneTimeTip(token.address,QUERYID1,blocky.timestamp)));//tip already claimed
-    let res = autopay.getCurrentTip(QUERYID1,token.address);
-    assert(res == web3.utils.toWei(300), "tip should be correct")
-    let finBal = await token.balanceOf(accounts[2]);
-    assert(finBal - startBal == web3.utils.toWei(100), "balance should change correctly")
-  });
-  it("test getDataFeed", async () => {
-    assert(0==1)
   });
   it("test getCurrentTip", async () => {
-    assert(0==1)
+    await h.expectThrowMessage(autopay.tip(token.address,QUERYID1,web3.utils.toWei("100")));
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    let res = await autopay.getCurrentTip(QUERYID1,token.address);
+    assert(res == web3.utils.toWei("100"), "tip should be correct")
   });
   it("test getPastTips", async () => {
-    assert(0==1)
+    let res = await autopay.getPastTips(token.address,QUERYID1)
+    assert(res.length == 0, "should be no tips",)
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    let blocky1 = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("200"))
+    let blocky2 = await h.getBlock();
+    res = await autopay.getPastTips(token.address,QUERYID1)
+    assert(res[0][0] == web3.utils.toWei("100"), "past tip amount should be correct")
+    assert(res[0][1] == blocky1.timestamp, "past tip amount should be correct")
+    assert(res[1][0] == web3.utils.toWei("200"), "past tip amount should be correct")
+    assert(res[1][1] == blocky2.timestamp, "past tip amount should be correct")
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("300"))
+    let blocky3 = await h.getBlock();
+    res = await autopay.getPastTips(token.address,QUERYID1)
+    assert(res[0][0] == web3.utils.toWei("100"), "past tip amount should be correct")
+    assert(res[0][1] == blocky1.timestamp, "past tip 1 timestamp should be correct")
+    assert(res[1][0] == web3.utils.toWei("200"), "past tip amount should be correct")
+    assert(res[1][1] == blocky2.timestamp, "past tip 2 timestamp should be correct")
+    assert(res[2][0] == web3.utils.toWei("300"), "past tip amount should be correct")
+    assert(res[2][1] == blocky3.timestamp, "past tip 3 timestamp should be correct")
   });
   it("test getPastTipByIndex", async () => {
-    assert(0==1)
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    let blocky1 = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("200"))
+    let blocky2 = await h.getBlock();
+    res = await autopay.getPastTipByIndex(token.address,QUERYID1,0)
+    assert(res[0] == web3.utils.toWei("100"), "past tip amount should be correct")
+    assert(res[1] == blocky1.timestamp, "past tip amount should be correct")
+    res = await autopay.getPastTipByIndex(token.address,QUERYID1,1)
+    assert(res[0] == web3.utils.toWei("200"), "past tip amount should be correct")
+    assert(res[1] == blocky2.timestamp, "past tip amount should be correct")
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("300"))
+    let blocky3 = await h.getBlock();
+    res = await autopay.getPastTipByIndex(token.address,QUERYID1,0)
+    assert(res[0] == web3.utils.toWei("100"), "past tip amount should be correct")
+    assert(res[1] == blocky1.timestamp, "past tip 1 timestamp should be correct")
+    res = await autopay.getPastTipByIndex(token.address,QUERYID1,1)
+    assert(res[0] == web3.utils.toWei("200"), "past tip amount should be correct")
+    assert(res[1] == blocky2.timestamp, "past tip 2 timestamp should be correct")
+    res = await autopay.getPastTipByIndex(token.address,QUERYID1,2)
+    assert(res[0] == web3.utils.toWei("300"), "past tip amount should be correct")
+    assert(res[1] == blocky3.timestamp, "past tip 3 timestamp should be correct")
   });
   it("test getPastTipCount", async () => {
-    assert(0==1)
+    let res = await autopay.getPastTipCount(QUERYID1,token.address)
+    assert(res == 0, "past tip count should be correct")
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    res = await autopay.getPastTipCount(QUERYID1,token.address)
+    assert(res == 2, "past tip count should be correct")
+    await token.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
+    res = await autopay.getPastTipCount(QUERYID1,token.address)
+    assert(res == 3, "past tip count should be correct")
   });
 });
