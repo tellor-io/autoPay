@@ -67,7 +67,7 @@ describe("Autopay - function tests", () => {
     // Updating Balance Checks
     // 1% of each tip being shaved for Tellor ~= .01 token/tip claimed
     // That's why token balance is .03 lower than originally expected.
-    expect(await token.balanceOf(accounts[1].address)).to.equal(h.toWei("2.97")); 
+    expect(await token.balanceOf(accounts[1].address)).to.equal(h.toWei("2.97"));
     // Checking if owner (Tellor) account was updated by fee amount (0.03)
     expect(await token.balanceOf(await autopay.owner())).to.equal(h.toWei("200.03"));
     expect(await token.balanceOf(autopay.address)).to.equal(h.toWei("999997"));
@@ -113,7 +113,7 @@ describe("Autopay - function tests", () => {
     expect(dataFeedAfter.balance).to.equal(h.toWei("99"));
     expect(claimedStatus).to.be.true;
   });
-  
+
   it("Tests fundFeed()", async () => {
     let result;
     let dataFeedDetails;
@@ -123,7 +123,7 @@ describe("Autopay - function tests", () => {
     assert.include(result.message, "feed not set up");
     // require(IERC20(_feed.token).transferFrom(msg.sender,address(this),_amount),"ERC20: transfer amount exceeds balance");
     result = await h.expectThrowMessage(autopay.fundFeed(bytesId, QUERYID1, h.toWei("1000300")));
-    assert.include(result.message, "ERC20: transfer amount exceeds balance");
+    assert.include(result.message, "ERC20: insufficient allowance");
     //VARIABLE UPDATES
     // _feed.balance += _amount;
     dataFeedDetails = await autopay.getDataFeed(bytesId,QUERYID1);
@@ -178,22 +178,22 @@ describe("Autopay - function tests", () => {
     let startBal = await token.balanceOf(accounts[2].address);
     await tellor.connect(accounts[4]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky1 = await h.getBlock();
-    await h.expectThrowMessage(autopay.claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//must have tip
+    await h.expectThrowMessage(autopay.claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//must have tip
     await token.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
-    await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//timestamp not elifible
+    await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//timestamp not elifible
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky = await h.getBlock();
-    await h.expectThrow(autopay.claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//must be the reporter
+    await h.expectThrow(autopay.claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//must be the reporter
     await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(3551), 0, "0x");
     let blocky2 = await h.getBlock();
-    await h.expectThrow(autopay.connect(accounts[3]).claimOneTimeTip(token.address,QUERYID1,blocky2.timestamp));//tip earned by previous submission
-    await autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,blocky.timestamp)
-    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,blocky.timestamp));//tip already claimed
+    await h.expectThrow(autopay.connect(accounts[3]).claimOneTimeTip(token.address,QUERYID1,[blocky2.timestamp]));//tip earned by previous submission
+    await autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp])
+    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//tip already claimed
     let res = await autopay.getCurrentTip(QUERYID1,token.address);
     assert(res == 0, "tip should be correct")
     let finBal = await token.balanceOf(accounts[2].address);
-    assert(finBal - startBal == web3.utils.toWei("100"), "balance should change correctly")
+    assert(finBal - startBal == web3.utils.toWei("99"), "balance should change correctly")
   });
   it("test getDataFeed", async () => {
     result = await autopay.getDataFeed(bytesId, QUERYID1);
