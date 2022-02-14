@@ -88,8 +88,8 @@ contract Autopay is UsingTellor {
         );
         uint256 _reward;
         uint256 _cumulativeReward;
-        for (uint256 i = 0; i < _timestamps.length; i++) {
-            (_reward) = _claimOneTimeTip(_token, _queryId, _timestamps[i]);
+        for (uint256 _i = 0; _i < _timestamps.length; _i++) {
+            (_reward) = _claimOneTimeTip(_token, _queryId, _timestamps[_i]);
             _cumulativeReward += _reward;
         }
         IERC20(_token).transfer(
@@ -116,11 +116,11 @@ contract Autopay is UsingTellor {
         uint256 _reward;
         uint256 _cumulativeReward;
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
-        for (uint256 i = 0; i < _timestamps.length; i++) {
+        for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             (_reporterAtTimestamp, _reward) = _claimTip(
                 _feedId,
                 _queryId,
-                _timestamps[i]
+                _timestamps[_i]
             );
             require(_reporterAtTimestamp == _reporter, "reporter mismatch");
             _cumulativeReward += _reward;
