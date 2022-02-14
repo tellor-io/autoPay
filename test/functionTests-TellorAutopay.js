@@ -86,7 +86,8 @@ describe("Autopay - function tests", () => {
     result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, array));
     assert.include(result.message, "insufficient feed balance");
     bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),firstBlocky.timestamp,3600,600]));
-    result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, [0]));
+    blockyNoVal = await h.getBlock()
+    result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)]));
     assert.include(result.message, "no value exists at timestamp");
     blocky = await h.getBlock();
     await autopay.connect(accounts[10]).setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,"0x");
@@ -181,13 +182,15 @@ describe("Autopay - function tests", () => {
     await h.expectThrowMessage(autopay.claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//must have tip
     await token.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"))
-    await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//timestamp not elifible
+    await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//timestamp not eligible
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky = await h.getBlock();
     await h.expectThrow(autopay.claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//must be the reporter
     await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(3551), 0, "0x");
     let blocky2 = await h.getBlock();
     await h.expectThrow(autopay.connect(accounts[3]).claimOneTimeTip(token.address,QUERYID1,[blocky2.timestamp]));//tip earned by previous submission
+    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp])); // buffer time has not passed
+    await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp])
     await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address,QUERYID1,[blocky.timestamp]));//tip already claimed
     let res = await autopay.getCurrentTip(QUERYID1,token.address);

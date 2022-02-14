@@ -72,6 +72,7 @@ describe("Autopay - e2e tests", function() {
     assert(pastTips[1].amount == web3.utils.toWei("30"), "Second cumulative recorded tip amount should be correct")
     assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be updated correctly")
     // claim first tip
+    await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blockySubmit1.timestamp])
     assert(await token.balanceOf(accounts[2].address) - web3.utils.toWei("9.9") == 0, "Reporter balance should increase correctly after claiming tip")
     assert(await token.balanceOf(accounts[0].address) - web3.utils.toWei("1000000.1") == 0, "Owner balance should increase correctly after claiming tip")
@@ -86,6 +87,7 @@ describe("Autopay - e2e tests", function() {
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32("200"), 0, '0x')
     blockySubmit2 = await h.getBlock()
     // claim second tip
+    await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blockySubmit2.timestamp])
     assert(await token.balanceOf(accounts[2].address) - web3.utils.toWei("39.6") == 0, "Reporter balance should increase correctly after claiming tip")
     assert(await token.balanceOf(accounts[0].address) - web3.utils.toWei("1000000.4") == 0, "Owner balance should increase correctly after claiming tip")
@@ -170,6 +172,7 @@ describe("Autopay - e2e tests", function() {
     }
     // claim valid one time tip
     ownerBalanceBefore = await token.balanceOf(accounts[0].address)
+    await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blocky.timestamp])
     await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blocky.timestamp])) // Tip already claimed
     assert(await token.balanceOf(autopay.address) - h.toWei("1999999") == 0, "Autopay contract balance should change correctly")
@@ -311,28 +314,14 @@ describe("Autopay - e2e tests", function() {
     abiCoder = new ethers.utils.AbiCoder
     feedId = feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, h.toWei("1"), blocky.timestamp, 3600, 600]))
     await token.approve(autopay.address, h.toWei("1000000"));
-    // await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
-    // for (i = 0; i < 10; i++) {
-    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
-    //   blocky = await h.getBlock()
-    // }
 
+  });
 
-    // submit 10 values for queryId 1
-    // skip a bunch of time.
-    // submit
-    // await token.approve(autopay.address, h.toWei("1000000"));
-    // await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
-    // for (i = 0; i < 10; i++) {
-    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
-    // }
+  it("multiple tokens", async function() {
+    const Token = await ethers.getContractFactory("TestToken");
+    token2 = await Token.deploy();
+    await token2.deployed();
+    await token2.mint(accounts[0].address, h.toWei("1000000"));
 
-
-
-    //withdraw funds and check that correct
-    //single tip
-    //more add funds
-    //withdraw
-    //assure fee taken is correct
   });
 });
