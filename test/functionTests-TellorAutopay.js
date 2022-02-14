@@ -123,7 +123,6 @@ describe("Autopay - function tests", () => {
     assert.include(result.message, "feed not set up");
     // require(IERC20(_feed.token).transferFrom(msg.sender,address(this),_amount),"ERC20: transfer amount exceeds balance");
     result = await h.expectThrowMessage(autopay.fundFeed(bytesId, QUERYID1, h.toWei("1000300")));
-    assert.include(result.message, "ERC20: insufficient allowance");
     //VARIABLE UPDATES
     // _feed.balance += _amount;
     dataFeedDetails = await autopay.getDataFeed(bytesId,QUERYID1);
