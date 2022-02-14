@@ -1,85 +1,338 @@
-const { expect, assert } = require("chai");
-const { ethers } = require("hardhat");
+const {
+  expect,
+  assert} = require("chai");
+const {
+  ethers
+} = require("hardhat");
 const h = require("./helpers/helpers");
 const web3 = require("web3");
 
 require("chai").use(require("chai-as-promised")).should();
 
-describe("Autopay - e2e tests", function () {
-    let tellor;
-    let autopay;
-    let accounts;
-    let token;
-    let firstBlocky;
-    let blocky;
-    let array = [];
-    let badArray = [];
-    let payerBefore;
-    const QUERYID1 = h.uintTob32(1);
-    const QUERYID2 = h.uintTob32(2);
-  
-    beforeEach(async function () {
-      accounts = await ethers.getSigners();
-      const TellorPlayground = await ethers.getContractFactory("TellorPlayground");
-      tellor = await TellorPlayground.deploy();
-      await tellor.deployed();
-      const Autopay = await ethers.getContractFactory("Autopay");
-      autopay = await Autopay.deploy(tellor.address,accounts[0].address,10);
-      await autopay.deployed();
-      const Token = await ethers.getContractFactory("TestToken");
-      token = await Token.deploy();
-      await token.deployed();
-      await token.mint(accounts[0].address, h.toWei("1000000"));
-      firstBlocky = await h.getBlock();
-      await autopay.setupPayer(token.address,QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,600,'0x');
-      await token.approve(autopay.address, h.toWei("1000000"));
-      await autopay.fillPayer(accounts[0].address, QUERYID1, h.toWei("1000000"));
-      payerBefore = await autopay.getPayer(accounts[0].address, QUERYID1);
-      await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(3500), 0, "0x");
-      blocky = await h.getBlock();
-      array[0] = blocky.timestamp;
-      await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3525), 0, "0x");
-      blocky = await h.getBlock();
-      badArray[0] = blocky.timestamp;
-      await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-      h.advanceTime(3600);
-      await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-      blocky = await h.getBlock();
-      array[1] = blocky.timestamp;
-      badArray[1] = blocky.timestamp;
-      h.advanceTime(3600);
-      await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(3575), 0, "0x");
-      blocky = await h.getBlock();
-      array[2] = blocky.timestamp;
-    });
-    describe("multiple queryID's, refills, pulls", () => {
-        await token.mint(accounts[1].address, h.toWei("100"));
-        ownerBalance = await token.balanceOf(accounts[0].address)
-        reporterBalance = await token.balanceOf(accounts[2].address)
-        await autopay.connect(accounts[1]).setupPayer(token.address,QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,'0x');
-        await token.approve(autopay.address, h.toWei("1000000"));
-        await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
-        for(i=0;i<10;i++){
-            await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575+i), 0, "0x");
-        }
-        await token.approve(autopay.address, h.toWei("1000000"));
-        await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
-        for(i=0;i<10;i++){
-            await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575+i), 0, "0x");
-        }
-        //withdraw funds and check that correct
-        //single tip
-        //more add funds
-        //withdraw
-        //assure fee taken is correct
-        assert(0 ==1)
-      });
-    describe("multiple queryID's, several disputes and refills", () => {
+describe("Autopay - e2e tests", function() {
+  let tellor;
+  let autopay;
+  let accounts;
+  let token;
+  const QUERYID1 = h.uintTob32(1);
+  const QUERYID2 = h.uintTob32(2);
+  const QUERYID3 = h.uintTob32(3);
 
-        assert(0 ==1)
-      });
-    describe("test no pay structure, but a tip", () => {
-        
-        assert(0 ==1)
-    });
+  beforeEach(async function() {
+    accounts = await ethers.getSigners();
+    const TellorPlayground = await ethers.getContractFactory("TellorPlayground");
+    tellor = await TellorPlayground.deploy();
+    await tellor.deployed();
+    const Autopay = await ethers.getContractFactory("Autopay");
+    autopay = await Autopay.deploy(tellor.address, accounts[0].address, 10);
+    await autopay.deployed();
+    const Token = await ethers.getContractFactory("TestToken");
+    token = await Token.deploy();
+    await token.deployed();
+    await token.mint(accounts[0].address, h.toWei("1000000"));
+  });
+
+  it("test no pay structure, but multiple tips", async function() {
+    let autopay1 = autopay.connect(accounts[1])
+    await token.mint(accounts[1].address, h.toWei("100"))
+    await token.connect(accounts[1]).approve(autopay.address, web3.utils.toWei("100"))
+    await h.expectThrow(autopay1.tip(token.address, QUERYID1, web3.utils.toWei("101"))) // "ERC20: transfer amount exceeds balance"
+    // add first tip
+    await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("10"))
+    blocky = await h.getBlock()
+    assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("90") == 0, "User balance should reduce correctly after tipping")
+    assert(await token.balanceOf(autopay.address) - web3.utils.toWei("10") == 0, "Autopay contract balance should increase correctly after user adds tip")
+    pastTips = await autopay.getPastTips(QUERYID1, token.address)
+    assert(pastTips.length == 1, "Tips array should be correct length")
+    assert(pastTips[0].amount == web3.utils.toWei("10"), "Recorded tip amount should be correct")
+    assert(pastTips[0].timestamp == blocky.timestamp, "Tip timestamp should be recorded correctly")
+    // submit value
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32("200"), 0, '0x')
+    blockySubmit1 = await h.getBlock()
+    // add second tip
+    await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("20"))
+    blocky2 = await h.getBlock()
+    assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("70") == 0, "User balance should reduce correctly after tipping")
+    assert(await token.balanceOf(autopay.address) - web3.utils.toWei("30") == 0, "Autopay contract balance should increase correctly after user adds tip")
+    pastTips = await autopay.getPastTips(QUERYID1, token.address)
+    assert(pastTips.length == 2, "Tips array should be correct length")
+    assert(pastTips[0].amount == web3.utils.toWei("10"), "First recorded tip amount should be correct")
+    assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+    assert(pastTips[1].amount == web3.utils.toWei("20"), "Second recorded tip amount should be correct")
+    assert(pastTips[1].timestamp == blocky2.timestamp, "Second tip timestamp should be recorded correctly")
+    // add third tip
+    await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("10"))
+    blocky3 = await h.getBlock()
+    assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("60") == 0, "User balance should reduce correctly after tipping")
+    assert(await token.balanceOf(autopay.address) - web3.utils.toWei("40") == 0, "Autopay contract balance should increase correctly after user adds tip")
+    pastTips = await autopay.getPastTips(QUERYID1, token.address)
+    assert(pastTips.length == 2, "Tips array should be correct length")
+    assert(pastTips[0].amount == web3.utils.toWei("10"), "First recorded tip amount should be correct")
+    assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+    assert(pastTips[1].amount == web3.utils.toWei("30"), "Second cumulative recorded tip amount should be correct")
+    assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be updated correctly")
+    // claim first tip
+    await autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blockySubmit1.timestamp])
+    assert(await token.balanceOf(accounts[2].address) - web3.utils.toWei("9.9") == 0, "Reporter balance should increase correctly after claiming tip")
+    assert(await token.balanceOf(accounts[0].address) - web3.utils.toWei("1000000.1") == 0, "Owner balance should increase correctly after claiming tip")
+    assert(await token.balanceOf(autopay.address) - web3.utils.toWei("30") == 0, "Autopay contract balance should decrease correctly after paying tip")
+    pastTips = await autopay.getPastTips(QUERYID1, token.address)
+    assert(pastTips.length == 2, "Tips array should be correct length")
+    assert(pastTips[0].amount == 0, "First recorded tip amount should be set to zero after tip claimed")
+    assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+    assert(pastTips[1].amount == web3.utils.toWei("30"), "Second cumulative recorded tip amount should be correct")
+    assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be correct")
+    // submit value
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32("200"), 0, '0x')
+    blockySubmit2 = await h.getBlock()
+    // claim second tip
+    await autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blockySubmit2.timestamp])
+    assert(await token.balanceOf(accounts[2].address) - web3.utils.toWei("39.6") == 0, "Reporter balance should increase correctly after claiming tip")
+    assert(await token.balanceOf(accounts[0].address) - web3.utils.toWei("1000000.4") == 0, "Owner balance should increase correctly after claiming tip")
+    assert(await token.balanceOf(autopay.address) == 0, "Autopay contract balance should decrease correctly after paying tip")
+    pastTips = await autopay.getPastTips(QUERYID1, token.address)
+    assert(pastTips.length == 2, "Tips array should be correct length")
+    assert(pastTips[0].amount == 0, "First recorded tip amount should be set to zero after tip claimed")
+    assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+    assert(pastTips[1].amount == 0, "Second cumulative recorded tip amount should be set to zero after tip claimed")
+    assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be correct")
+  })
+
+  it("single queryID, multiple refills, pulls", async function() {
+    interval1 = 36000
+    window1 = 6000
+    reward1 = h.toWei("1")
+    reward1MinusFee = reward1 * 0.99
+    ownerBalance = await token.balanceOf(accounts[0].address)
+    reporterBalance = await token.balanceOf(accounts[2].address)
+    blockyArray1 = new Array()
+    blockyArray2 = new Array()
+    // setup data feed queryId 1
+    blocky = await h.getBlock()
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1, '0x');
+    abiCoder = new ethers.utils.AbiCoder
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1])
+    feedId = feedId = ethers.utils.keccak256(feedBytes)
+    await token.approve(autopay.address, h.toWei("1000000"));
+    // fund feed
+    await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
+    // submit 10 values for queryId 1
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
+      blockyArray1[i] = await h.getBlock()
+    }
+    // advance time to next interval
+    await h.advanceTime(interval1)
+    // submit 10 values for queryId 1
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3585 + i), 0, "0x");
+      blockyArray2[i] = await h.getBlock()
+    }
+    // advance time beyond buffer
+    await h.advanceTime(3600 * 12)
+    // make sure can't claim invalid tips, interval1
+    for (i = 1; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId, QUERYID1, [blockyArray1[i].timestamp])); // "timestamp not first report within window"
+    }
+    assert(await token.balanceOf(autopay.address) - h.toWei("1000000") == 0, "Autopay contract balance should not change")
+    assert(await token.balanceOf(accounts[2].address) == 0, "Reporter balance should still be zero")
+    // valid claim tip, interval1
+    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId, QUERYID1, [blockyArray1[0].timestamp])
+    assert(await token.balanceOf(autopay.address) - h.toWei("999999") == 0, "Autopay contract balance should not change")
+    assert(await token.balanceOf(accounts[2].address) - reward1MinusFee == 0, "Reporter balance should update correctly")
+    assert(await token.balanceOf(accounts[0].address) - (reward1 - reward1MinusFee) == 0, "Owner balance should update correctly")
+    // mint more tokens, add tip
+    await token.mint(accounts[0].address, h.toWei("10"))
+    await token.approve(autopay.address, h.toWei("10"))
+    await autopay.tip(token.address, QUERYID1, h.toWei("10"))
+    blocky = await h.getBlock()
+    pastTips = await autopay.getPastTips(QUERYID1, token.address)
+    assert(pastTips.length == 1, "Tips array should be correct length")
+    assert(pastTips[0].amount == web3.utils.toWei("10"), "First recorded tip amount should be correct")
+    assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+    assert(await token.balanceOf(autopay.address) - h.toWei("1000009") == 0, "Autopay contract balance should update correctly")
+    // mint and add more funds to autopay feed
+    await token.mint(accounts[0].address, h.toWei("1000000"))
+    await token.approve(autopay.address, h.toWei("1000000"))
+    await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
+    feedDetails = await autopay.getDataFeed(feedId, QUERYID1)
+    assert(feedDetails.reward == reward1, "Recorded reward amount should be correct")
+    assert(feedDetails.balance == h.toWei("1999999"), "Recorded feed balance should be correct")
+    // submit another value (eligible for tip)
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(4000), 0, "0x");
+    blocky = await h.getBlock()
+    // ensure can't claim one-time-tip for ineligible submissions
+    for (i = 1; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blockyArray1[i].timestamp])); // "Timestamp not eligible for tip"
+    }
+    for (i = 1; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blockyArray2[i].timestamp])); // "Timestamp not eligible for tip"
+    }
+    // claim valid one time tip
+    ownerBalanceBefore = await token.balanceOf(accounts[0].address)
+    await autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blocky.timestamp])
+    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(token.address, QUERYID1, [blocky.timestamp])) // Tip already claimed
+    assert(await token.balanceOf(autopay.address) - h.toWei("1999999") == 0, "Autopay contract balance should change correctly")
+    assert(await token.balanceOf(accounts[2].address) - reward1MinusFee - h.toWei("9.9") == 0, "Reporter balance should update correctly")
+    assert(await token.balanceOf(accounts[0].address) - ownerBalanceBefore - h.toWei("0.1") == 0, "Owner balance should change correctly")
+  });
+
+  it("multiple queryID's, several disputes and refills", async function() {
+    interval1 = 86400
+    window1 = 3600
+    reward1 = h.toWei("1")
+    rewardMinusFee1 = reward1 * 0.99
+    blockyArray1QID1 = new Array()
+    blockyArray2QID1 = new Array()
+
+    interval2 = interval1
+    window2 = window1
+    reward2 = h.toWei("2")
+    rewardMinusFee2 = reward2 * 0.99
+    blockyArray1QID2 = new Array()
+    blockyArray2QID2 = new Array()
+
+    interval3 = interval1
+    window3 = window1
+    reward3 = h.toWei("3")
+    rewardMinusFee3 = reward3 * 0.99
+    blockyArray1QID3 = new Array()
+    blockyArray2QID3 = new Array()
+
+    blockyArray1QID1 = new Array()
+    blockyArray2QID1 = new Array()
+    await token.approve(autopay.address, h.toWei("10000000000"));
+    abiCoder = new ethers.utils.AbiCoder
+    blocky = await h.getBlock()
+    // setup data feed queryId 1
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1, '0x');
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1])
+    feedId1 = ethers.utils.keccak256(feedBytes)
+    // fund feed 1
+    await autopay.fundFeed(feedId1, QUERYID1, h.toWei("100"));
+    // setup data feed queryId 2
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID2, reward2, blocky.timestamp, interval2, window2, '0x');
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, token.address, reward2, blocky.timestamp, interval2, window2])
+    feedId2 = ethers.utils.keccak256(feedBytes)
+    // fund feed 2
+    await autopay.fundFeed(feedId2, QUERYID2, h.toWei("100"));
+    // setup data feed queryId 3
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID3, reward3, blocky.timestamp, interval3, window3, '0x');
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, token.address, reward3, blocky.timestamp, interval3, window3])
+    feedId3 = ethers.utils.keccak256(feedBytes)
+    // fund feed 3
+    await autopay.fundFeed(feedId3, QUERYID3, h.toWei("100"));
+    // submit 10 values for queryId 1
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(1575 + i), 0, "0x");
+      blockyArray1QID1[i] = await h.getBlock()
+    }
+    // submit 10 values for queryId 2
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID2, h.uintTob32(2575 + i), 0, "0x");
+      blockyArray1QID2[i] = await h.getBlock()
+    }
+    // submit 10 values for queryId 3
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID3, h.uintTob32(3575 + i), 0, "0x");
+      blockyArray1QID3[i] = await h.getBlock()
+    }
+    // make sure can't claim any tips before dispute buffer queryID 1
+    for (i = 0; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
+    }
+    // make sure can't claim any tips before dispute buffer queryID 2
+    for (i = 0; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
+    }
+    // make sure can't claim any tips before dispute buffer queryID 3
+    for (i = 0; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
+    }
+    // advance time to next interval
+    await h.advanceTime(interval1)
+    // submit 10 values for queryId 1
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(1675 + i), 0, "0x");
+      blockyArray2QID1[i] = await h.getBlock()
+    }
+    // submit 10 values for queryId 2
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID2, h.uintTob32(2675 + i), 0, "0x");
+      blockyArray2QID2[i] = await h.getBlock()
+    }
+    // submit 10 values for queryId 3
+    for (i = 0; i < 10; i++) {
+      await tellor.connect(accounts[2]).submitValue(QUERYID3, h.uintTob32(3675 + i), 0, "0x");
+      blockyArray2QID3[i] = await h.getBlock()
+    }
+    // make sure can't claim any tips before dispute buffer queryID 1
+    for (i = 0; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
+    }
+    // make sure can't claim any tips before dispute buffer queryID 2
+    for (i = 0; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
+    }
+    // make sure can't claim any tips before dispute buffer queryID 3
+    for (i = 0; i < 10; i++) {
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
+    }
+    // claim tip interval 1 queryID 1
+    ownerBalanceBefore = await token.balanceOf(accounts[0].address)
+    autopayBalanceBefore = await token.balanceOf(autopay.address)
+    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
+    await h.expectThrow(autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])) // tip already claimed
+    assert(await token.balanceOf(accounts[2].address) == h.toWei("0.99"), "Reporter balance should update correctly")
+    ownerBalanceAfter = await token.balanceOf(accounts[0].address);
+    assert((ownerBalanceAfter.sub(ownerBalanceBefore) - h.toWei("0.01")) == 0, "Owner balance should update correctly")
+    autopayBalanceAfter = await token.balanceOf(autopay.address);
+    assert(autopayBalanceBefore.sub(autopayBalanceAfter) - h.toWei("1") == 0, "Autopay contract balance should update correctly")
+    // advance time to next interval
+    await h.advanceTime(interval1)
+    // dispute first three values from interval 1, queryId 2
+    for (i = 0; i < 3; i++) {
+      await tellor.beginDispute(QUERYID2, blockyArray1QID2[i].timestamp)
+    }
+    // ensure can't claim tips for disputed value
+    for (i = 0; i < 3; i++) {
+      await h.expectThrow(autopay.claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])) // value with given timestamp doesn't exist
+    }
+    // claim tip for undisputed valid value
+    await autopay.claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[3].timestamp])
+  });
+
+  it("multiple queryID's, refills, pulls", async function() {
+    // await token.mint(accounts[1].address, h.toWei("100"));
+    ownerBalance = await token.balanceOf(accounts[0].address)
+    reporterBalance = await token.balanceOf(accounts[2].address)
+    blocky = await h.getBlock()
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, h.toWei("1"), blocky.timestamp, 36000, 6000, '0x');
+    abiCoder = new ethers.utils.AbiCoder
+    feedId = feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, h.toWei("1"), blocky.timestamp, 3600, 600]))
+    await token.approve(autopay.address, h.toWei("1000000"));
+    // await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
+    // for (i = 0; i < 10; i++) {
+    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
+    //   blocky = await h.getBlock()
+    // }
+
+
+    // submit 10 values for queryId 1
+    // skip a bunch of time.
+    // submit
+    // await token.approve(autopay.address, h.toWei("1000000"));
+    // await autopay.fillPayer(accounts[1].address, QUERYID1, h.toWei("1000000"));
+    // for (i = 0; i < 10; i++) {
+    //   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3575 + i), 0, "0x");
+    // }
+
+
+
+    //withdraw funds and check that correct
+    //single tip
+    //more add funds
+    //withdraw
+    //assure fee taken is correct
+  });
 });
