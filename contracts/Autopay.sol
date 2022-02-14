@@ -71,6 +71,12 @@ contract Autopay is UsingTellor {
         fee = _fee;
     }
 
+    /**
+     * @dev Function to claim singular tip
+     * @param _token address of token tipped
+     * @param _queryId id of reported data
+     * @param _timestamps ID of timestamps you reported for
+     */
     function claimOneTimeTip(
         address _token,
         bytes32 _queryId,
@@ -200,6 +206,12 @@ contract Autopay is UsingTellor {
         emit NewDataFeed(_token, _queryId, _feedId, _queryData);
     }
 
+    /**
+     * @dev Function to run a single tip
+     * @param _token address of token to tip
+     * @param _queryId id of tipped data
+     * @param _amount amount to tip
+     */
     function tip(
         address _token,
         bytes32 _queryId,
@@ -224,7 +236,11 @@ contract Autopay is UsingTellor {
         emit TipAdded(_token, _queryId, _amount);
     }
 
-    // Getters
+    /**
+     * @dev Getter function to read current data feeds
+     * @param _queryId id of reported data
+     * @return feedIds for queryId
+     */
     function getCurrentFeeds(bytes32 _queryId)
         external
         view
@@ -233,6 +249,12 @@ contract Autopay is UsingTellor {
         return currentFeeds[_queryId];
     }
 
+    /**
+     * @dev Getter function to current oneTime tip by queryId
+     * @param _queryId id of reported data
+     * @param _token address of tipped token
+     * @return amount of tip
+     */
     function getCurrentTip(bytes32 _queryId, address _token)
         external
         view
@@ -263,6 +285,12 @@ contract Autopay is UsingTellor {
         return (dataFeed[_queryId][_feedId].details);
     }
 
+    /**
+     * @dev Getter function to get number of past tips
+     * @param _queryId id of reported data
+     * @param _token address of tipped token
+     * @return count of tips available
+     */
     function getPastTipCount(bytes32 _queryId, address _token)
         external
         view
@@ -271,12 +299,33 @@ contract Autopay is UsingTellor {
         return tips[_queryId][_token].length;
     }
 
+    /**
+     * @dev Getter function for past tips
+     * @param _queryId id of reported data
+     * @param _token address of tipped token
+     * @return Tip struct (amount/timestamp) of all past tips
+     */
     function getPastTips(bytes32 _queryId, address _token)
         external
         view
         returns (Tip[] memory)
     {
         return tips[_queryId][_token];
+    }
+
+    /**
+     * @dev Getter function for past tips by index
+     * @param _queryId id of reported data
+     * @param _token address of tipped token
+     * @param _index uint index in the Tip array
+     * @return amount/timestamp of specific tip
+     */
+    function getPastTipByIndex(
+        bytes32 _queryId,
+        address _token,
+        uint256 _index
+    ) external view returns (Tip memory) {
+        return tips[_queryId][_token][_index];
     }
 
     /**
@@ -294,13 +343,6 @@ contract Autopay is UsingTellor {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
     }
 
-    function getPastTipByIndex(
-        bytes32 _queryId,
-        address _token,
-        uint256 _index
-    ) external view returns (Tip memory) {
-        return tips[_queryId][_token][_index];
-    }
 
     // Internal functions
     /**
@@ -351,6 +393,13 @@ contract Autopay is UsingTellor {
         return (_reporter, _rewardAmount);
     }
 
+    /**
+     * @dev Getter function to current oneTime tip by queryId
+     * @param _token address of tipped token
+     * @param _queryId id of reported data
+     * @param _timestamp timestamp of one time tip
+     * @return amount of tip
+     */
     function _claimOneTimeTip(
         address _token,
         bytes32 _queryId,
