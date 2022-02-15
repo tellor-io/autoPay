@@ -29,6 +29,6 @@
   },
   "dependencies": {
     "@openzeppelin/contracts": "^4.4.1",
-    "usingtellor": "^4.0.1"
+    "usingtellor": "^4.0.4"
   }
 }

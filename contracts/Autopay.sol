@@ -48,6 +48,7 @@ contract Autopay is UsingTellor {
         bytes _queryData
     );
     event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount);
+    event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount);
     event TipAdded(address _token, bytes32 _queryId, uint256 _amount);
     event TipClaimed(
         bytes32 _feedId,
@@ -97,6 +98,7 @@ contract Autopay is UsingTellor {
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
         );
         IERC20(_token).transfer(owner, (_cumulativeReward * fee) / 1000);
+        emit OneTimeTipClaimed(_queryId, _token, _cumulativeReward);
     }
 
     /**
@@ -110,7 +112,7 @@ contract Autopay is UsingTellor {
         address _reporter,
         bytes32 _feedId,
         bytes32 _queryId,
-        uint256[] memory _timestamps
+        uint256[] calldata _timestamps
     ) external {
         address _reporterAtTimestamp;
         uint256 _reward;
@@ -146,6 +148,7 @@ contract Autopay is UsingTellor {
     ) external {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
         require(_feed.reward > 0, "feed not set up");
+        _feed.balance += _amount;
         require(
             IERC20(_feed.token).transferFrom(
                 msg.sender,
@@ -154,7 +157,6 @@ contract Autopay is UsingTellor {
             ),
             "ERC20: transfer amount exceeds balance"
         );
-        _feed.balance += _amount;
         emit DataFeedFunded(_feedId, _queryId, _amount);
     }
 
@@ -217,10 +219,6 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         uint256 _amount
     ) external {
-        require(
-            IERC20(_token).transferFrom(msg.sender, address(this), _amount),
-            "ERC20: transfer amount exceeds balance"
-        );
         Tip[] storage _tips = tips[_queryId][_token];
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp));
@@ -233,6 +231,10 @@ contract Autopay is UsingTellor {
                 _tips.push(Tip(_amount, block.timestamp));
             }
         }
+        require(
+            IERC20(_token).transferFrom(msg.sender, address(this), _amount),
+            "ERC20: transfer amount exceeds balance"
+        );
         emit TipAdded(_token, _queryId, _amount);
     }
 
@@ -343,7 +345,6 @@ contract Autopay is UsingTellor {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
     }
 
-
     // Internal functions
     /**
      * @dev Internal function which allows Tellor reporters to claim their tips
@@ -365,9 +366,16 @@ contract Autopay is UsingTellor {
             block.timestamp - _timestamp > 12 hours,
             "buffer time has not passed"
         );
+        require(
+            block.timestamp - _timestamp < 12 weeks,
+            "timestamp too old to claim tip"
+        );
         // ITellor _oracle = ITellor(master.addresses(keccak256(abi.encode("_ORACLE_CONTRACT")))); // use this for tellorX
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
-        require(keccak256(_valueRetrieved) != keccak256(bytes('')), "no value exists at timestamp");
+        require(
+            keccak256(_valueRetrieved) != keccak256(bytes("")),
+            "no value exists at timestamp"
+        );
         uint256 _n = (_timestamp - _feed.details.startTime) /
             _feed.details.interval; // finds closest interval _n to timestamp
         uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds timestamp _c of interval _n
@@ -407,18 +415,22 @@ contract Autopay is UsingTellor {
     ) internal returns (uint256) {
         Tip[] storage _tips = tips[_queryId][_token];
         require(
-            _tips.length > 0,
-            "No tips submitted for this token and queryId"
+            block.timestamp - _timestamp > 12 hours,
+            "buffer time has not passed"
         );
         address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
         require(
             msg.sender == _reporter,
             "Message sender not reporter for given queryId and timestamp"
         );
+        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
+        require(
+            keccak256(_valueRetrieved) != keccak256(bytes("")),
+            "no value exists at timestamp"
+        );
         uint256 _min;
         uint256 _max = _tips.length;
         uint256 _mid;
-
         while (_max - _min > 1) {
             _mid = (_max + _min) / 2;
             if (_tips[_mid].timestamp > _timestamp) {
@@ -427,7 +439,6 @@ contract Autopay is UsingTellor {
                 _min = _mid;
             }
         }
-
         (, , uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
         require(
             _timestampBefore < _tips[_min].timestamp,
