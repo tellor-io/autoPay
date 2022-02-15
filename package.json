@@ -24,11 +24,16 @@
     "ethereum-waffle": "^3.4.0",
     "ethers": "^5.5.1",
     "hardhat": "^2.6.8",
+    "hardhat-gas-reporter": "^1.0.8",
     "prettier": "^2.5.1",
     "prettier-plugin-solidity": "^1.0.0-beta.19"
   },
   "dependencies": {
+    "@nomiclabs/hardhat-etherscan": "^3.0.1",
     "@openzeppelin/contracts": "^4.4.1",
+    "dotenv": "^16.0.0",
+    "hardhat-contract-sizer": "^2.4.0",
+    "solidity-coverage": "^0.7.20",
     "usingtellor": "^4.0.4"
   }
 }
