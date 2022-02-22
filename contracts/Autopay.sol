@@ -49,7 +49,12 @@ contract Autopay is UsingTellor {
     );
     event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount);
     event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount);
-    event TipAdded(address _token, bytes32 _queryId, uint256 _amount);
+    event TipAdded(
+        address _token,
+        bytes32 _queryId,
+        uint256 _amount,
+        bytes _queryData
+    );
     event TipClaimed(
         bytes32 _feedId,
         bytes32 _queryId,
@@ -217,8 +222,13 @@ contract Autopay is UsingTellor {
     function tip(
         address _token,
         bytes32 _queryId,
-        uint256 _amount
+        uint256 _amount,
+        bytes calldata _queryData
     ) external {
+        require(
+            _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
+            "id must be hash of bytes data"
+        );
         Tip[] storage _tips = tips[_queryId][_token];
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp));
@@ -235,7 +245,7 @@ contract Autopay is UsingTellor {
             IERC20(_token).transferFrom(msg.sender, address(this), _amount),
             "ERC20: transfer amount exceeds balance"
         );
-        emit TipAdded(_token, _queryId, _amount);
+        emit TipAdded(_token, _queryId, _amount, _queryData);
     }
 
     /**

@@ -32,9 +32,9 @@ describe("Autopay - e2e tests", function() {
   let autopay1 = autopay.connect(accounts[1])
   await token.mint(accounts[1].address, h.toWei("100"))
   await token.connect(accounts[1]).approve(autopay.address, web3.utils.toWei("100"))
-  await h.expectThrow(autopay1.tip(token.address, QUERYID1, web3.utils.toWei("101"))) // "ERC20: transfer amount exceeds balance"
+  await h.expectThrow(autopay1.tip(token.address, QUERYID1, web3.utils.toWei("101"),'0x')) // "ERC20: transfer amount exceeds balance"
   // add first tip
-  await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("10"))
+  await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("10"),'0x')
   blocky = await h.getBlock()
   assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("90") == 0, "User balance should reduce correctly after tipping")
   assert(await token.balanceOf(autopay.address) - web3.utils.toWei("10") == 0, "Autopay contract balance should increase correctly after user adds tip")
@@ -46,7 +46,7 @@ describe("Autopay - e2e tests", function() {
   await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32("200"), 0, '0x')
   blockySubmit1 = await h.getBlock()
   // add second tip
-  await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("20"))
+  await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("20"),'0x')
   blocky2 = await h.getBlock()
   assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("70") == 0, "User balance should reduce correctly after tipping")
   assert(await token.balanceOf(autopay.address) - web3.utils.toWei("30") == 0, "Autopay contract balance should increase correctly after user adds tip")
@@ -57,7 +57,7 @@ describe("Autopay - e2e tests", function() {
   assert(pastTips[1].amount == web3.utils.toWei("20"), "Second recorded tip amount should be correct")
   assert(pastTips[1].timestamp == blocky2.timestamp, "Second tip timestamp should be recorded correctly")
   // add third tip
-  await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("10"))
+  await autopay1.tip(token.address, QUERYID1, web3.utils.toWei("10"),'0x')
   blocky3 = await h.getBlock()
   assert(await token.balanceOf(accounts[1].address) - web3.utils.toWei("60") == 0, "User balance should reduce correctly after tipping")
   assert(await token.balanceOf(autopay.address) - web3.utils.toWei("40") == 0, "Autopay contract balance should increase correctly after user adds tip")
@@ -142,7 +142,7 @@ it("single queryID, multiple refills, pulls", async function() {
   // mint more tokens, add tip
   await token.mint(accounts[0].address, h.toWei("10"))
   await token.approve(autopay.address, h.toWei("10"))
-  await autopay.tip(token.address, QUERYID1, h.toWei("10"))
+  await autopay.tip(token.address, QUERYID1, h.toWei("10"),'0x')
   blocky = await h.getBlock()
   pastTips = await autopay.getPastTips(QUERYID1, token.address)
   assert(pastTips.length == 1, "Tips array should be correct length")
@@ -389,8 +389,8 @@ it("multiple queryID's, several disputes and refills", async function() {
       await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
     }
     // add 2 tips
-    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"))
-    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"))
+    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"),'0x')
+    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"),'0x')
     // submit value
     await tellor.connect(accounts[2]).submitValue(h.uintTob32(4), h.uintTob32(4575), 0, "0x");
     blockyTip1 = await h.getBlock()
@@ -460,8 +460,8 @@ it("multiple queryID's, several disputes and refills", async function() {
       blockyArray1QID3[i] = await h.getBlock()
     }
     // add 2 tips
-    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"))
-    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"))
+    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"),'0x')
+    await autopay.tip(token.address, h.uintTob32(4), h.toWei("1"),'0x')
     // submit value
     await tellor.connect(accounts[2]).submitValue(h.uintTob32(4), h.uintTob32(4575), 0, "0x");
     blockyTip2 = await h.getBlock()
