@@ -49,7 +49,12 @@ contract Autopay is UsingTellor {
     );
     event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount);
     event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount);
-    event TipAdded(address _token, bytes32 _queryId, uint256 _amount);
+    event TipAdded(
+        address _token,
+        bytes32 _queryId,
+        uint256 _amount,
+        bytes _queryData
+    );
     event TipClaimed(
         bytes32 _feedId,
         bytes32 _queryId,
@@ -61,6 +66,8 @@ contract Autopay is UsingTellor {
     /**
      * @dev Initializes system parameters
      * @param _tellor address of Tellor contract
+     * @param _owner address of fee recipient
+     * @param _fee percentage, 1000 is 100%, 50 is 5%, etc.
      */
     constructor(
         address payable _tellor,
@@ -85,7 +92,7 @@ contract Autopay is UsingTellor {
     ) external {
         require(
             tips[_queryId][_token].length > 0,
-            "No tips submitted for this token and queryId"
+            "no tips submitted for this token and queryId"
         );
         uint256 _reward;
         uint256 _cumulativeReward;
@@ -114,17 +121,16 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         uint256[] calldata _timestamps
     ) external {
-        address _reporterAtTimestamp;
         uint256 _reward;
         uint256 _cumulativeReward;
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            (_reporterAtTimestamp, _reward) = _claimTip(
-                _feedId,
-                _queryId,
-                _timestamps[_i]
+            _reward = _claimTip(_feedId, _queryId, _timestamps[_i]);
+            require(
+                master.getReporterByTimestamp(_queryId, _timestamps[_i]) ==
+                    _reporter,
+                "reporter mismatch"
             );
-            require(_reporterAtTimestamp == _reporter, "reporter mismatch");
             _cumulativeReward += _reward;
         }
         IERC20(_feed.token).transfer(
@@ -168,6 +174,7 @@ contract Autopay is UsingTellor {
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
      * @param _window amount of time after each new interval when reports are eligible for tips
+     * @param _queryData the data used by reporters to fulfill the query
      */
     function setupDataFeed(
         address _token,
@@ -213,12 +220,18 @@ contract Autopay is UsingTellor {
      * @param _token address of token to tip
      * @param _queryId id of tipped data
      * @param _amount amount to tip
+     * @param _queryData the data used by reporters to fulfill the query
      */
     function tip(
         address _token,
         bytes32 _queryId,
-        uint256 _amount
+        uint256 _amount,
+        bytes calldata _queryData
     ) external {
+        require(
+            _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
+            "id must be hash of bytes data"
+        );
         Tip[] storage _tips = tips[_queryId][_token];
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp));
@@ -235,13 +248,13 @@ contract Autopay is UsingTellor {
             IERC20(_token).transferFrom(msg.sender, address(this), _amount),
             "ERC20: transfer amount exceeds balance"
         );
-        emit TipAdded(_token, _queryId, _amount);
+        emit TipAdded(_token, _queryId, _amount, _queryData);
     }
 
     /**
      * @dev Getter function to read current data feeds
      * @param _queryId id of reported data
-     * @return feedIds for queryId
+     * @return feedIds array for queryId
      */
     function getCurrentFeeds(bytes32 _queryId)
         external
@@ -347,18 +360,17 @@ contract Autopay is UsingTellor {
 
     // Internal functions
     /**
-     * @dev Internal function which allows Tellor reporters to claim their tips
+     * @dev Internal function which allows Tellor reporters to claim their autopay tips
      * @param _feedId of dataFeed
      * @param _queryId id of reported data
      * @param _timestamp timestamp of reported data eligible for reward
-     * @return address reporter
      * @return uint256 reward amount
      */
     function _claimTip(
         bytes32 _feedId,
         bytes32 _queryId,
         uint256 _timestamp
-    ) internal returns (address, uint256) {
+    ) internal returns (uint256) {
         Feed storage _feed = dataFeed[_queryId][_feedId];
         require(_feed.details.balance > 0, "insufficient feed balance");
         require(!_feed.rewardClaimed[_timestamp], "reward already claimed");
@@ -370,7 +382,6 @@ contract Autopay is UsingTellor {
             block.timestamp - _timestamp < 12 weeks,
             "timestamp too old to claim tip"
         );
-        // ITellor _oracle = ITellor(master.addresses(keccak256(abi.encode("_ORACLE_CONTRACT")))); // use this for tellorX
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
         require(
             keccak256(_valueRetrieved) != keccak256(bytes("")),
@@ -397,12 +408,11 @@ contract Autopay is UsingTellor {
             _feed.details.balance = 0;
         }
         _feed.rewardClaimed[_timestamp] = true;
-        address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
-        return (_reporter, _rewardAmount);
+        return _rewardAmount;
     }
 
     /**
-     * @dev Getter function to current oneTime tip by queryId
+     ** @dev Internal function which allows Tellor reporters to claim their one time tips
      * @param _token address of tipped token
      * @param _queryId id of reported data
      * @param _timestamp timestamp of one time tip
@@ -418,10 +428,9 @@ contract Autopay is UsingTellor {
             block.timestamp - _timestamp > 12 hours,
             "buffer time has not passed"
         );
-        address _reporter = master.getReporterByTimestamp(_queryId, _timestamp);
         require(
-            msg.sender == _reporter,
-            "Message sender not reporter for given queryId and timestamp"
+            msg.sender == master.getReporterByTimestamp(_queryId, _timestamp),
+            "message sender not reporter for given queryId and timestamp"
         );
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
         require(
@@ -442,13 +451,13 @@ contract Autopay is UsingTellor {
         (, , uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
         require(
             _timestampBefore < _tips[_min].timestamp,
-            "Tip earned by previous submission"
+            "tip earned by previous submission"
         );
         require(
             _timestamp > _tips[_min].timestamp,
-            "Timestamp not eligible for tip"
+            "timestamp not eligible for tip"
         );
-        require(_tips[_min].amount > 0, "Tip already claimed");
+        require(_tips[_min].amount > 0, "tip already claimed");
         uint256 _tipAmount = _tips[_min].amount;
         _tips[_min].amount = 0;
         return _tipAmount;
