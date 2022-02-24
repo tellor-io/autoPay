@@ -169,7 +169,7 @@ contract Autopay is UsingTellor {
     /**
      * @dev Initializes dataFeed parameters.
      * @param _token address of ERC20 token used for tipping
-     * @param _queryId id of specific desired data feet
+     * @param _queryId id of specific desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
