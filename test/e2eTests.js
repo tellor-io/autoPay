@@ -107,9 +107,9 @@ it("single queryID, multiple refills, pulls", async function() {
   blockyArray2 = new Array()
   // setup data feed queryId 1
   blocky = await h.getBlock()
-  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1, '0x');
+  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1,0, '0x');
   abiCoder = new ethers.utils.AbiCoder
-  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1])
+  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1,0])
   feedId = feedId = ethers.utils.keccak256(feedBytes)
   await token.approve(autopay.address, h.toWei("1000000"));
   // fund feed
@@ -204,20 +204,20 @@ it("multiple queryID's, several disputes and refills", async function() {
   abiCoder = new ethers.utils.AbiCoder
   blocky = await h.getBlock()
   // setup data feed queryId 1
-  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1, '0x');
-  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1])
+  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1,0, '0x');
+  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1,0])
   feedId1 = ethers.utils.keccak256(feedBytes)
   // fund feed 1
   await autopay.fundFeed(feedId1, QUERYID1, h.toWei("100"));
   // setup data feed queryId 2
-  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID2, reward2, blocky.timestamp, interval2, window2, '0x');
-  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, token.address, reward2, blocky.timestamp, interval2, window2])
+  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID2, reward2, blocky.timestamp, interval2, window2,0, '0x');
+  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, token.address, reward2, blocky.timestamp, interval2,window2,0])
   feedId2 = ethers.utils.keccak256(feedBytes)
   // fund feed 2
   await autopay.fundFeed(feedId2, QUERYID2, h.toWei("100"));
   // setup data feed queryId 3
-  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID3, reward3, blocky.timestamp, interval3, window3, '0x');
-  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, token.address, reward3, blocky.timestamp, interval3, window3])
+  await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID3, reward3, blocky.timestamp, interval3, window3,0, '0x');
+  feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, token.address, reward3, blocky.timestamp, interval3, window3,0])
   feedId3 = ethers.utils.keccak256(feedBytes)
   // fund feed 3
   await autopay.fundFeed(feedId3, QUERYID3, h.toWei("100"));
@@ -329,20 +329,20 @@ it("multiple queryID's, several disputes and refills", async function() {
     abiCoder = new ethers.utils.AbiCoder
     blocky = await h.getBlock()
     // setup data feed queryId 1
-    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1, '0x');
-    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1, window1])
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID1, reward1, blocky.timestamp, interval1, window1, 0,'0x');
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, reward1, blocky.timestamp, interval1,window1,0])
     feedId1 = ethers.utils.keccak256(feedBytes)
     // fund feed 1
     await autopay.fundFeed(feedId1, QUERYID1, h.toWei("2"));
     // setup data feed queryId 2
-    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID2, reward2, blocky.timestamp + interval1, interval2, window2, '0x');
-    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, token.address, reward2, blocky.timestamp + interval1, interval2, window2])
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID2, reward2, blocky.timestamp + interval1, interval2, window2,0, '0x');
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, token.address, reward2, blocky.timestamp + interval1, interval2, window2,0])
     feedId2 = ethers.utils.keccak256(feedBytes)
     // fund feed 2
     await autopay.fundFeed(feedId2, QUERYID2, h.toWei("100"));
     // setup data feed queryId 3
-    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID3, reward3, blocky.timestamp + interval1 + interval1, interval3, window3, '0x');
-    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, token.address, reward3, blocky.timestamp + interval1 + interval1, interval3, window3])
+    await autopay.connect(accounts[1]).setupDataFeed(token.address, QUERYID3, reward3, blocky.timestamp + interval1 + interval1, interval3, window3,0, '0x');
+    feedBytes = abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, token.address, reward3, blocky.timestamp + interval1 + interval1, interval3, window3,0])
     feedId3 = ethers.utils.keccak256(feedBytes)
     // fund feed 3
     await autopay.fundFeed(feedId3, QUERYID3, h.toWei("100"));
