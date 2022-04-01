@@ -62,12 +62,12 @@ require("dotenv").config();
     //   gas: 2000000 ,
     //   gasPrice: 250000000000
     // }
-    harmony_testnet: {
-      url: `${process.env.NODE_URL_HARMONY_TESTNET}`,
-      seeds: [process.env.TESTNET_PK],
-      gas: 2000000 ,
-      gasPrice: 250000000000
-    }
+    // harmony_testnet: {
+    //   url: `${process.env.NODE_URL_HARMONY_TESTNET}`,
+    //   seeds: [process.env.TESTNET_PK],
+    //   gas: 2000000 ,
+    //   gasPrice: 250000000000
+    // }
     // harmony_mainnet: {
     //   url: `${process.env.NODE_URL_HARMONY_MAINNET}`,
     //   seeds: [process.env.MAINNET_PK],
