@@ -28,7 +28,7 @@ contract Autopay is UsingTellor {
         uint256 startTime; // time of first payment window
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
-        uint256 priceThreshold; //change in price necessitating an update 
+        uint256 priceThreshold; //change in price necessitating an update 100 = 1%
     }
 
     struct Feed {
@@ -412,11 +412,14 @@ contract Autopay is UsingTellor {
         if(_feed.details.priceThreshold != 0){
             uint256 _v1 = _bytesToUint(_valueRetrieved);
             uint256 _v2 =_bytesToUint(_valueRetrievedBefore);
-            if(_v1 >= _v2){
-                _priceChange = _v1 - _v2;
+            if(_v2 == 0){
+                _priceChange = 10000;
+            }
+            else if(_v1 >= _v2){
+                _priceChange = 10000 * (_v1 - _v2) / _v2;
             }
             else{
-                _priceChange = _v2 - _v1;
+                _priceChange = 10000 * (_v2 - _v1) / _v2;
             }
         }
         if(_priceChange <= _feed.details.priceThreshold){
