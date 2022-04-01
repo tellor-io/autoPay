@@ -9,6 +9,8 @@ require("dotenv").config();
 
 //const dotenv = require('dotenv').config()
 //npx hardhat run scripts/deploy.js --network rinkeby
+//npx hardhat run scripts/deploy.js --network harmony_testnet
+//npx hardhat run scripts/deploy.js --network harmony_mainnet
 
 var tellorAddress = '0x41b66dd93b03e89D29114a7613A6f9f0d4F40178'
 var ownerAddress = '0x80fc34a2f9FfE86F41580F47368289C402DEc660'
@@ -56,7 +58,13 @@ async function deployAutopay(_network, _pk, _nodeURL, tellorAdd, ownerAdd, feeAm
     } else if (net == "arbitrum_testnet"){
         console.log("Autopay contract deployed to:","https://rinkeby-explorer.arbitrum.io/#/"+ autopay.address)
         console.log("    transaction hash:", "https://rinkeby-explorer.arbitrum.io/#/tx/" + autopay.deployTransaction.hash);
-    }  else if (net == "xdaiSokol"){ //https://blockscout.com/poa/xdai/address/
+    } else if (net == "harmony_testnet"){
+        console.log("Autopay contract deployed to:","https://explorer.pops.one/address/"+ autopay.address)
+        console.log("    transaction hash:", "https://explorer.pops.one/txt/" + autopay.deployTransaction.hash);
+    } else if (net == "harmony_mainnet"){
+        console.log("Autopay contract deployed to:","https://explorer.harmony.one/address/"+ autopay.address)
+        console.log("    transaction hash:", "https://explorer.harmony.one/txt/" + autopay.deployTransaction.hash);
+    } else if (net == "xdaiSokol"){ //https://blockscout.com/poa/xdai/address/
       console.log("Autopay contract deployed to:","https://blockscout.com/poa/sokol/address/"+ autopay.address)
       console.log("    transaction hash:", "https://blockscout.com/poa/sokol/tx/" + autopay.deployTransaction.hash);
     } else if (net == "xdai"){ //https://blockscout.com/poa/xdai/address/
@@ -86,9 +94,17 @@ async function deployAutopay(_network, _pk, _nodeURL, tellorAdd, ownerAdd, feeAm
 }
 
 
-deployAutopay("polygon_testnet", process.env.TESTNET_PK, process.env.NODE_URL_MUMBAI, tellorAddress, ownerAddress, feeAmount)
+deployAutopay("harmony_testnet", process.env.TESTNET_PK, process.env.NODE_URL_HARMONY_TESTNET, tellorAddress, ownerAddress, feeAmount)
     .then(() => process.exit(0))
     .catch(error => {
         console.error(error);
         process.exit(1);
     });
+
+// deployAutopay("harmony_mainnet", process.env.MAINNET_PK, process.env.NODE_URL_HARMONY_MAINNET, tellorAddress, ownerAddress, feeAmount)
+//     .then(() => process.exit(0))
+//     .catch(error => {
+//         console.error(error);
+//         process.exit(1);
+//     });
+

@@ -37,14 +37,14 @@ require("dotenv").config();
       //   url: "https://eth-mainnet.alchemyapi.io/v2/7dW8KCqWwKa1vdaitq-SxmKfxWZ4yPG6"
       // },
       allowUnlimitedContractSize: true
-    }// ,
+    },
     // rinkeby: {
     //      url: `${process.env.NODE_URL_RINKEBY}`,
     //      seeds: [process.env.PRIVATE_KEY],
     //      gas: 10000000 ,
     //      gasPrice: 40000000000
     // } ,
-    //    mainnet: {
+    // mainnet: {
     //      url: `${process.env.NODE_URL_MAINNET}`,
     //      seeds: [process.env.PRIVATE_KEY],
     //      gas: 3000000 ,
@@ -57,16 +57,28 @@ require("dotenv").config();
     //     gasPrice: 50000000000
     //   }
     // polygon: {
-      //   url: `${process.env.NODE_URL_MATIC}`,
-      //   seeds: [process.env.PRIVATE_KEY],
-      //   gas: 2000000 ,
-      //   gasPrice: 250000000000
-      // }
+    //   url: `${process.env.NODE_URL_MATIC}`,
+    //   seeds: [process.env.PRIVATE_KEY],
+    //   gas: 2000000 ,
+    //   gasPrice: 250000000000
+    // }
+    harmony_testnet: {
+      url: `${process.env.NODE_URL_HARMONY_TESTNET}`,
+      seeds: [process.env.TESTNET_PK],
+      gas: 2000000 ,
+      gasPrice: 250000000000
+    }
+    // harmony_mainnet: {
+    //   url: `${process.env.NODE_URL_HARMONY_MAINNET}`,
+    //   seeds: [process.env.MAINNET_PK],
+    //   gas: 2000000 ,
+    //   gasPrice: 250000000000
+    // }
   },
   etherscan: {
     // Your API key for Etherscan
     // Obtain one at https://etherscan.io/
-    apiKey: process.env.POLYGONSCAN
+    apiKey: process.env.ETHERSCAN
   },
 
   contractSizer: {
