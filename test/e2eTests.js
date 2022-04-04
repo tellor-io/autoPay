@@ -536,4 +536,46 @@ it("multiple queryID's, several disputes and refills", async function() {
     await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])
   });
 
+  it("more priceChange tests", async function() {
+    let firstBlocky = await h.getBlock();
+    await autopay.setupDataFeed(token.address, QUERYID1, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500, "0x");
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, token.address, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500]));
+    await token.approve(autopay.address, h.toWei("1000000"));
+    await autopay.fundFeed(feedId1, QUERYID1, h.toWei("1000000"));
+    // up threshold
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    firstBlocky = await h.getBlock();
+    await h.expectThrow(autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])) // buffer time not passed
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(106), 0, "0x")
+    secondBlocky = await h.getBlock();
+    await h.advanceTime(86400/2)
+    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp])
+    // down threshold
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x")
+    firstBlocky = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(94), 0, "0x")
+    secondBlocky = await h.getBlock();
+    await h.advanceTime(86400/2)
+    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp])
+    // up down down up up - up bad
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x")
+    firstBlocky = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(106), 0, "0x")
+    secondBlocky = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x")
+    thirdBlocky = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(94), 0, "0x")
+    fourthBlocky = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x")
+    fifthBlocky = await h.getBlock();
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(106), 0, "0x")
+    sixthBlocky = await h.getBlock();
+    // up more without meeting threshold
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(108), 0, "0x")
+    firstBlockyBad = await h.getBlock()
+    await h.advanceTime(86400/2)
+    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp, thirdBlocky.timestamp, fourthBlocky.timestamp, fifthBlocky.timestamp, sixthBlocky.timestamp])
+    await h.expectThrow(autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlockyBad.timestamp])) // threshold not met, not first within window
+  });
+
 });
