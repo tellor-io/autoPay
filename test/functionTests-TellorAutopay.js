@@ -26,8 +26,8 @@ describe("Autopay - function tests", () => {
     await token.deployed();
     await token.mint(accounts[0].address, h.toWei("1000200"));
     firstBlocky = await h.getBlock();
-    await autopay.setupDataFeed(token.address,QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,"0x");
-    bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),firstBlocky.timestamp,3600,600]));
+    await autopay.setupDataFeed(token.address,QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,"0x");
+    bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),firstBlocky.timestamp,3600,600,0]));
     await token.approve(autopay.address, h.toWei("1000000"));
     await autopay.fundFeed(bytesId, QUERYID1, h.toWei("1000000"));
     payerBefore = await autopay.getDataFeed(bytesId, QUERYID1);
@@ -87,13 +87,13 @@ describe("Autopay - function tests", () => {
     bytesId = keccak256(abiCoder.encode(["string"], ["Joshua"]));
     result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, array));
     assert.include(result.message, "insufficient feed balance");
-    bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),firstBlocky.timestamp,3600,600]));
+    bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),firstBlocky.timestamp,3600,600,0]));
     blockyNoVal = await h.getBlock()
     result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)]));
     assert.include(result.message, "no value exists at timestamp");
     blocky = await h.getBlock();
-    await autopay.connect(accounts[10]).setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,"0x");
-    bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),blocky.timestamp,3600,600]));
+    await autopay.connect(accounts[10]).setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,"0x");
+    bytesId = keccak256(abiCoder.encode(["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,token.address,h.toWei("1"),blocky.timestamp,3600,600,0]));
     await token.approve(autopay.address, h.toWei("100"));
     await autopay.fundFeed(bytesId, QUERYID1, h.toWei("100"));
     await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
@@ -138,10 +138,10 @@ describe("Autopay - function tests", () => {
 
   it("setupDataFeed", async () => {
     let queryIdToUse;
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,h.uintTob32(200),h.toWei("1"),blocky.timestamp,3600,600,"0x"));//must be hash
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,"0x"));//fee is zerio
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,600,600,"0x"));//already set up
-    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,"0x"));//interval > window
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,h.uintTob32(200),h.toWei("1"),blocky.timestamp,3600,600,0,"0x"));//must be hash
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,0,"0x"));//fee is zerio
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID1,h.toWei("1"),blocky.timestamp,600,600,0,"0x"));//already set up
+    await h.expectThrowMessage(autopay.setupDataFeed(token.address,QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,0,"0x"));//interval > window
     let result = await autopay.getDataFeed(bytesId, QUERYID1);
     expect(result[0]).to.equal(token.address);
     expect(result[1]).to.equal(h.toWei("1"));

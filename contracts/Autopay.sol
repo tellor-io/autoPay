@@ -28,6 +28,7 @@ contract Autopay is UsingTellor {
         uint256 startTime; // time of first payment window
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
+        uint256 priceThreshold; //change in price necessitating an update 100 = 1%
     }
 
     struct Feed {
@@ -174,6 +175,7 @@ contract Autopay is UsingTellor {
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
      * @param _window amount of time after each new interval when reports are eligible for tips
+     * @param _priceThreshold amount price must change to automate update regardless of time (negated if 0, 100 = 1%)
      * @param _queryData the data used by reporters to fulfill the query
      */
     function setupDataFeed(
@@ -183,6 +185,7 @@ contract Autopay is UsingTellor {
         uint256 _startTime,
         uint256 _interval,
         uint256 _window,
+        uint256 _priceThreshold,
         bytes calldata _queryData
     ) external {
         require(
@@ -196,7 +199,8 @@ contract Autopay is UsingTellor {
                 _reward,
                 _startTime,
                 _interval,
-                _window
+                _window, 
+                _priceThreshold
             )
         );
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
@@ -211,6 +215,7 @@ contract Autopay is UsingTellor {
         _feed.startTime = _startTime;
         _feed.interval = _interval;
         _feed.window = _window;
+        _feed.priceThreshold = _priceThreshold;
         currentFeeds[_queryId].push(_feedId);
         emit NewDataFeed(_token, _queryId, _feedId, _queryData);
     }
@@ -358,7 +363,19 @@ contract Autopay is UsingTellor {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
     }
 
+
     // Internal functions
+    /**
+     * @dev Internal function to read if a reward has been claimed
+     * @param _b bytes value to convert to uint256
+     * @return _number uint256 converted from bytes
+     */
+    function _bytesToUint(bytes memory _b) internal pure returns (uint256 _number){
+        for(uint256 i=0;i<_b.length;i++){
+            _number = _number + uint8(_b[i]);
+        }
+    }
+
     /**
      * @dev Internal function which allows Tellor reporters to claim their autopay tips
      * @param _feedId of dataFeed
@@ -390,15 +407,31 @@ contract Autopay is UsingTellor {
         uint256 _n = (_timestamp - _feed.details.startTime) /
             _feed.details.interval; // finds closest interval _n to timestamp
         uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds timestamp _c of interval _n
-        require(
-            _timestamp - _c < _feed.details.window,
-            "timestamp not within window"
-        );
-        (, , uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
-        require(
-            _timestampBefore < _c,
-            "timestamp not first report within window"
-        );
+        (,bytes memory _valueRetrievedBefore,uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
+        uint256 _priceChange;//price change from last value to current value
+        if(_feed.details.priceThreshold != 0){
+            uint256 _v1 = _bytesToUint(_valueRetrieved);
+            uint256 _v2 =_bytesToUint(_valueRetrievedBefore);
+            if(_v2 == 0){
+                _priceChange = 10000;
+            }
+            else if(_v1 >= _v2){
+                _priceChange = 10000 * (_v1 - _v2) / _v2;
+            }
+            else{
+                _priceChange = 10000 * (_v2 - _v1) / _v2;
+            }
+        }
+        if(_priceChange <= _feed.details.priceThreshold){
+            require(
+                _timestamp - _c < _feed.details.window,
+                "timestamp not within window"
+            );
+            require(
+                _timestampBefore < _c,
+                "timestamp not first report within window"
+            );
+        }
         uint256 _rewardAmount;
         if (_feed.details.balance >= _feed.details.reward) {
             _rewardAmount = _feed.details.reward;
