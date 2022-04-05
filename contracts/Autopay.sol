@@ -101,11 +101,11 @@ contract Autopay is UsingTellor {
             (_reward) = _claimOneTimeTip(_token, _queryId, _timestamps[_i]);
             _cumulativeReward += _reward;
         }
-        IERC20(_token).transfer(
+        require(IERC20(_token).transfer(
             msg.sender,
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
-        );
-        IERC20(_token).transfer(owner, (_cumulativeReward * fee) / 1000);
+        ));
+        require(IERC20(_token).transfer(owner, (_cumulativeReward * fee) / 1000));
         emit OneTimeTipClaimed(_queryId, _token, _cumulativeReward);
     }
 
@@ -134,11 +134,11 @@ contract Autopay is UsingTellor {
             );
             _cumulativeReward += _reward;
         }
-        IERC20(_feed.token).transfer(
+        require(IERC20(_feed.token).transfer(
             _reporter,
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
-        );
-        IERC20(_feed.token).transfer(owner, (_cumulativeReward * fee) / 1000);
+        ));
+        require(IERC20(_feed.token).transfer(owner, (_cumulativeReward * fee) / 1000));
         emit TipClaimed(_feedId, _queryId, _feed.token, _cumulativeReward);
     }
 
@@ -408,7 +408,7 @@ contract Autopay is UsingTellor {
             _feed.details.interval; // finds closest interval _n to timestamp
         uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds timestamp _c of interval _n
         (,bytes memory _valueRetrievedBefore,uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
-        uint256 _priceChange;//price change from last value to current value
+        uint256 _priceChange = 0;//price change from last value to current value
         if(_feed.details.priceThreshold != 0){
             uint256 _v1 = _bytesToUint(_valueRetrieved);
             uint256 _v2 =_bytesToUint(_valueRetrievedBefore);
@@ -470,7 +470,7 @@ contract Autopay is UsingTellor {
             keccak256(_valueRetrieved) != keccak256(bytes("")),
             "no value exists at timestamp"
         );
-        uint256 _min;
+        uint256 _min = 0;
         uint256 _max = _tips.length;
         uint256 _mid;
         while (_max - _min > 1) {
