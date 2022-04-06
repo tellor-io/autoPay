@@ -80,11 +80,12 @@ contract Autopay is UsingTellor {
         fee = _fee;
     }
 
-    /**
+
+     /**
      * @dev Function to claim singular tip
      * @param _token address of token tipped
-     * @param _queryId id of reported data
-     * @param _timestamps ID of timestamps you reported for
+     * @param _queryId ID of reported data
+     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimOneTimeTip(
         address _token,
@@ -112,9 +113,9 @@ contract Autopay is UsingTellor {
     /**
      * @dev Allows Tellor reporters to claim their tips in batches
      * @param _reporter address of Tellor reporter
-     * @param _feedId unique dataFeed Id
-     * @param _queryId id of reported data
-     * @param _timestamps[] timestamps array of reported data eligible for reward
+     * @param _feedId unique feed identifier
+     * @param _queryId ID of reported data
+     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimTip(
         address _reporter,
@@ -144,9 +145,9 @@ contract Autopay is UsingTellor {
 
     /**
      * @dev Allows dataFeed account to be filled with tokens
-     * @param _feedId unique dataFeed Id for queryId
-     * @param _queryId id of reported data associated with feed
-     * @param _amount quantity of tokens to fund feed account
+     * @param _feedId unique feed identifier
+     * @param _queryId identifier of reported data type associated with feed
+     * @param _amount quantity of tokens to fund feed
      */
     function fundFeed(
         bytes32 _feedId,
@@ -170,7 +171,7 @@ contract Autopay is UsingTellor {
     /**
      * @dev Initializes dataFeed parameters.
      * @param _token address of ERC20 token used for tipping
-     * @param _queryId id of specific desired data feed
+     * @param _queryId unique identifier of desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
@@ -223,7 +224,7 @@ contract Autopay is UsingTellor {
     /**
      * @dev Function to run a single tip
      * @param _token address of token to tip
-     * @param _queryId id of tipped data
+     * @param _queryId ID of tipped data
      * @param _amount amount to tip
      * @param _queryData the data used by reporters to fulfill the query
      */
