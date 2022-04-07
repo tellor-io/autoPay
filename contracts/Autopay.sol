@@ -276,6 +276,15 @@ contract Autopay is UsingTellor {
         return feedsWithFunding;
     }
 
+    /**
+    * @dev getter function to lookup query IDs from dataFeed IDs
+    * @param _feedId dataFeed unique identifier
+    * @return corresponding query ID
+    */
+    function getQueryIdFromFeedId(bytes32 _feedId) external view returns (bytes32) {
+        return queryIdFromDataFeedId[_feedId];
+    }
+
 
     /**
      * @dev Getter function to read current data feeds
