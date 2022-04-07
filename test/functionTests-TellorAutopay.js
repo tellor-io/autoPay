@@ -283,4 +283,17 @@ describe("Autopay - function tests", () => {
     res = await autopay.getPastTipCount(QUERYID1,token.address)
     assert(res == 2, "past tip count 3 should be correct")
   });
+  it("getFundedFeeds", async () => {
+    // Check no funded feeds
+    let feedIds1 = await autopay.getFundedFeeds()
+    assert(feedIds.length == 0, "should be no funded feeds")
+
+    // Check funded feeds
+    await token.mint(accounts[0].address,web3.utils.toWei("1234"))
+    await token.approve(autopay.address,web3.utils.toWei("1234"))
+    await autopay.tip(token.address,QUERYID1,web3.utils.toWei("1234"),'0x')
+    let feedIds2 = await autopay.getFundedFeeds()
+    assert(feedIds2.length == 1, "should be one funded feed")
+    assert(feedIds2[0] == QUERYID1, "incorrect funded feed")
+  });
 });
