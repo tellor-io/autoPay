@@ -20,6 +20,7 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryID to dataFeedID to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryID to dataFeedIDs array
     mapping(bytes32 => mapping(address => Tip[])) public tips; // mapping queryID to token address to tips
+    mapping(bytes32 => bytes32) queryIdFromDataFeedId; // mapping dataFeedID to queryID
     bytes32[] public feedsWithFunding; // array of dataFeedIDs that have funding
     // Structs
     struct FeedDetails {
@@ -30,7 +31,7 @@ contract Autopay is UsingTellor {
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
         uint256 priceThreshold; //change in price necessitating an update 100 = 1%
-        uint256 feedsWithFundingIndex; // index of dataFeedID in feedsWithFunding array (-1 if not in array)
+        uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
     }
 
     struct Feed {
@@ -160,9 +161,9 @@ contract Autopay is UsingTellor {
         require(_feed.reward > 0, "feed not set up");
         _feed.balance += _amount;
         // Add to array of feeds with funding
-        if (_feed.feedsWithFundingIndex == -1) {
+        if (_feed.feedsWithFundingIndex == 0) {
             feedsWithFunding.push(_feedId);
-            _feed.feedsWithFundingIndex = feedsWithFunding.length - 1;
+            _feed.feedsWithFundingIndex = feedsWithFunding.length;
         }
         require(
             IERC20(_feed.token).transferFrom(
@@ -224,8 +225,10 @@ contract Autopay is UsingTellor {
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
-        _feed.feedsWithFundingIndex = -1;
+        _feed.feedsWithFundingIndex = 0;
+
         currentFeeds[_queryId].push(_feedId);
+        queryIdFromDataFeedId[_feedId] = _queryId;
         emit NewDataFeed(_token, _queryId, _feedId, _queryData);
     }
 
@@ -269,7 +272,7 @@ contract Autopay is UsingTellor {
     /**
     * @dev Getter function for currently funded feeds
     */
-    function getFundedFeeds() external view returns (bytes32[]) {
+    function getFundedFeeds() external view returns (bytes32[] memory) {
         return feedsWithFunding;
     }
 
@@ -460,15 +463,16 @@ contract Autopay is UsingTellor {
         }
         // Adjust currently funded feeds
         if (_feed.details.balance == 0) {
-            idx = _feed.details.feedsWithFundingIndex;
+            uint256 idx = _feed.details.feedsWithFundingIndex - 1;
             // Replace unfunded feed in array with last element
-            lastAddedFeed = feedsWithFunding[feedsWithFunding.length - 1];
-            feedsWithFunding[idx] = lastAddedFeed;
-            lastAddedFeed.details.feedsWithFundingIndex = idx;
+            feedsWithFunding[idx] = feedsWithFunding[feedsWithFunding.length - 1];
+            bytes32 _feedIdLastFunded = feedsWithFunding[idx];
+            bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
+            dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
 
             // Remove last element
             delete feedsWithFunding[feedsWithFunding.length - 1];
-            feedsWithFunding.length--;
+            feedsWithFunding.length - 1;
         }
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
