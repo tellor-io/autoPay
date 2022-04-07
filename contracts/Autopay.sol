@@ -472,13 +472,14 @@ contract Autopay is UsingTellor {
         }
         // Adjust currently funded feeds
         if (_feed.details.balance < _feed.details.reward) {
-            uint256 idx = _feed.details.feedsWithFundingIndex - 1;
-            // Replace unfunded feed in array with last element
-            feedsWithFunding[idx] = feedsWithFunding[feedsWithFunding.length - 1];
-            bytes32 _feedIdLastFunded = feedsWithFunding[idx];
-            bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
-            dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
-
+            if (feedsWithFunding.length > 1) {
+                uint256 idx = _feed.details.feedsWithFundingIndex - 1;
+                // Replace unfunded feed in array with last element
+                feedsWithFunding[idx] = feedsWithFunding[feedsWithFunding.length - 1];
+                bytes32 _feedIdLastFunded = feedsWithFunding[idx];
+                bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
+                dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
+            }
             feedsWithFunding.pop();
         }
         _feed.rewardClaimed[_timestamp] = true;
