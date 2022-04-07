@@ -283,6 +283,7 @@ describe("Autopay - function tests", () => {
     res = await autopay.getPastTipCount(QUERYID1,token.address)
     assert(res == 2, "past tip count 3 should be correct")
   });
+
   it("getFundedFeeds", async () => {
     // Check one existing funded feed
     let feedIds = await autopay.getFundedFeeds()
@@ -291,25 +292,35 @@ describe("Autopay - function tests", () => {
     let qId = await autopay.getQueryIdFromFeedId(feedIds[0])
     assert(qId == QUERYID1, "incorrect query ID")
 
-    // Check adding one funded feed
+    // Check adding two funded feeds
     const QUERYID3 = h.uintTob32(3)
-    await autopay.setupDataFeed(token.address,QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,"0x");
-    let newFeedId = keccak256(abiCoder.encode(
+    const QUERYID4 = h.uintTob32(4)
+    let feedId3 = keccak256(abiCoder.encode(
       ["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"],
       [QUERYID3,token.address,h.toWei("1"),blocky.timestamp,600,400,0]
     ));
-    await token.approve(autopay.address, h.toWei("1"));
-    await autopay.fundFeed(newFeedId,QUERYID3,h.toWei("1"))
+    let feedId4 = keccak256(abiCoder.encode(
+      ["bytes32", "address", "uint256", "uint256", "uint256", "uint256", "uint256"],
+      [QUERYID4,token.address,h.toWei("1"),blocky.timestamp,600,400,0]
+    ));
+    await autopay.setupDataFeed(token.address,QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,"0x");
+    await autopay.setupDataFeed(token.address,QUERYID4,h.toWei("1"),blocky.timestamp,600,400,0,"0x");
+    await token.approve(autopay.address, h.toWei("2"));
+    await autopay.fundFeed(feedId3,QUERYID3,h.toWei("1"))
+    await autopay.fundFeed(feedId4,QUERYID4,h.toWei("1"))
     feedIds = await autopay.getFundedFeeds()
-    console.log("2 feedIds",feedIds)
-    assert(feedIds.length == 2, "should be two funded feeds")
-    assert(feedIds[1] == newFeedId, "incorrect second funded feed query ID")
+    console.log("3 feedIds",feedIds)
+    assert(feedIds.length == 3, "should be two funded feeds")
+    assert(feedIds[1] == feedId3, "incorrect second funded feed")
+    assert(feedIds[2] == feedId4, "incorrect third funded feed")
 
-    // Check remove funded feed
-
-    // await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
+    // // Check remove funded feed
+    // await tellor.connect(accounts[2]).submitValue(QUERYID3, h.uintTob32(3550), 0, "0x");
     // await token.approve(autopay.address,web3.utils.toWei("100"))
     // await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"),'0x')
-
+    // feedIds = await autopay.getFundedFeeds()
+    // console.log("2 feedIds",feedIds)
+    // assert(feedIds.length == 2, "should be two funded feeds")
+    // assert(feedIds[1] == newFeedId, "incorrect second funded feed query ID")
   });
 });
