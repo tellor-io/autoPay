@@ -314,13 +314,14 @@ describe("Autopay - function tests", () => {
     assert(feedIds[1] == feedId3, "incorrect second funded feed")
     assert(feedIds[2] == feedId4, "incorrect third funded feed")
 
-    // // Check remove funded feed
-    // await tellor.connect(accounts[2]).submitValue(QUERYID3, h.uintTob32(3550), 0, "0x");
-    // await token.approve(autopay.address,web3.utils.toWei("100"))
-    // await autopay.tip(token.address,QUERYID1,web3.utils.toWei("100"),'0x')
-    // feedIds = await autopay.getFundedFeeds()
-    // console.log("2 feedIds",feedIds)
-    // assert(feedIds.length == 2, "should be two funded feeds")
-    // assert(feedIds[1] == newFeedId, "incorrect second funded feed query ID")
+    // Check remove funded feed
+    await tellor.connect(accounts[2]).submitValue(QUERYID3, h.uintTob32(1234), 0, "0x");
+    _block = await h.getBlock();
+    await h.advanceTime(43200);
+    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [_block.timestamp])
+    feedIds = await autopay.getFundedFeeds()
+    console.log("2 feedIds",feedIds)
+    assert(feedIds.length == 2, "should be two funded feeds")
+    assert(feedIds[1] == feedId4, "incorrect second funded feed query ID")
   });
 });
