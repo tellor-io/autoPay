@@ -479,9 +479,7 @@ contract Autopay is UsingTellor {
             bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
             dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
 
-            // Remove last element
-            delete feedsWithFunding[feedsWithFunding.length - 1];
-            feedsWithFunding.length - 1;
+            feedsWithFunding.pop();
         }
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
