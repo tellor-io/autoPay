@@ -46,7 +46,8 @@ contract Autopay is UsingTellor {
         address _token,
         bytes32 _queryId,
         bytes32 _feedId,
-        bytes _queryData
+        bytes _queryData,
+        address _feedCreator
     );
     event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount);
     event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount);
@@ -217,7 +218,7 @@ contract Autopay is UsingTellor {
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
         currentFeeds[_queryId].push(_feedId);
-        emit NewDataFeed(_token, _queryId, _feedId, _queryData);
+        emit NewDataFeed(_token, _queryId, _feedId, _queryData, msg.sender);
     }
 
     /**
