@@ -20,6 +20,8 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryID to dataFeedID to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryID to dataFeedIDs array
     mapping(bytes32 => mapping(address => Tip[])) public tips; // mapping queryID to token address to tips
+    mapping(bytes32 => bytes32) queryIdFromDataFeedId; // mapping dataFeedID to queryID
+    bytes32[] public feedsWithFunding; // array of dataFeedIDs that have funding
     // Structs
     struct FeedDetails {
         address token; // token used for tipping
@@ -29,6 +31,7 @@ contract Autopay is UsingTellor {
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
         uint256 priceThreshold; //change in price necessitating an update 100 = 1%
+        uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
     }
 
     struct Feed {
@@ -80,11 +83,12 @@ contract Autopay is UsingTellor {
         fee = _fee;
     }
 
-    /**
+
+     /**
      * @dev Function to claim singular tip
      * @param _token address of token tipped
-     * @param _queryId id of reported data
-     * @param _timestamps ID of timestamps you reported for
+     * @param _queryId ID of reported data
+     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimOneTimeTip(
         address _token,
@@ -112,9 +116,9 @@ contract Autopay is UsingTellor {
     /**
      * @dev Allows Tellor reporters to claim their tips in batches
      * @param _reporter address of Tellor reporter
-     * @param _feedId unique dataFeed Id
-     * @param _queryId id of reported data
-     * @param _timestamps[] timestamps array of reported data eligible for reward
+     * @param _feedId unique feed identifier
+     * @param _queryId ID of reported data
+     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimTip(
         address _reporter,
@@ -144,9 +148,9 @@ contract Autopay is UsingTellor {
 
     /**
      * @dev Allows dataFeed account to be filled with tokens
-     * @param _feedId unique dataFeed Id for queryId
-     * @param _queryId id of reported data associated with feed
-     * @param _amount quantity of tokens to fund feed account
+     * @param _feedId unique feed identifier
+     * @param _queryId identifier of reported data type associated with feed
+     * @param _amount quantity of tokens to fund feed
      */
     function fundFeed(
         bytes32 _feedId,
@@ -164,13 +168,18 @@ contract Autopay is UsingTellor {
             ),
             "ERC20: transfer amount exceeds balance"
         );
+        // Add to array of feeds with funding
+        if (_feed.feedsWithFundingIndex == 0 && _feed.balance > 0) {
+            feedsWithFunding.push(_feedId);
+            _feed.feedsWithFundingIndex = feedsWithFunding.length;
+        }
         emit DataFeedFunded(_feedId, _queryId, _amount);
     }
 
     /**
      * @dev Initializes dataFeed parameters.
      * @param _token address of ERC20 token used for tipping
-     * @param _queryId id of specific desired data feed
+     * @param _queryId unique identifier of desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
@@ -216,14 +225,16 @@ contract Autopay is UsingTellor {
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
+
         currentFeeds[_queryId].push(_feedId);
+        queryIdFromDataFeedId[_feedId] = _queryId;
         emit NewDataFeed(_token, _queryId, _feedId, _queryData);
     }
 
     /**
      * @dev Function to run a single tip
      * @param _token address of token to tip
-     * @param _queryId id of tipped data
+     * @param _queryId ID of tipped data
      * @param _amount amount to tip
      * @param _queryData the data used by reporters to fulfill the query
      */
@@ -255,6 +266,24 @@ contract Autopay is UsingTellor {
         );
         emit TipAdded(_token, _queryId, _amount, _queryData);
     }
+
+
+    /**
+    * @dev Getter function for currently funded feeds
+    */
+    function getFundedFeeds() external view returns (bytes32[] memory) {
+        return feedsWithFunding;
+    }
+
+    /**
+    * @dev getter function to lookup query IDs from dataFeed IDs
+    * @param _feedId dataFeed unique identifier
+    * @return corresponding query ID
+    */
+    function getQueryIdFromFeedId(bytes32 _feedId) external view returns (bytes32) {
+        return queryIdFromDataFeedId[_feedId];
+    }
+
 
     /**
      * @dev Getter function to read current data feeds
@@ -433,12 +462,22 @@ contract Autopay is UsingTellor {
             );
         }
         uint256 _rewardAmount;
-        if (_feed.details.balance >= _feed.details.reward) {
+        if (_feed.details.balance > _feed.details.reward) {
             _rewardAmount = _feed.details.reward;
             _feed.details.balance -= _feed.details.reward;
         } else {
             _rewardAmount = _feed.details.balance;
             _feed.details.balance = 0;
+            // Adjust currently funded feeds
+            if (feedsWithFunding.length > 1) {
+                uint256 idx = _feed.details.feedsWithFundingIndex - 1;
+                // Replace unfunded feed in array with last element
+                feedsWithFunding[idx] = feedsWithFunding[feedsWithFunding.length - 1];
+                bytes32 _feedIdLastFunded = feedsWithFunding[idx];
+                bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
+                dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
+            }
+            feedsWithFunding.pop();
         }
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
