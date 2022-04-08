@@ -169,7 +169,7 @@ contract Autopay is UsingTellor {
             "ERC20: transfer amount exceeds balance"
         );
         // Add to array of feeds with funding
-        if (_feed.feedsWithFundingIndex == 0 && _feed.balance >= _feed.reward) {
+        if (_feed.feedsWithFundingIndex == 0 && _feed.balance > 0) {
             feedsWithFunding.push(_feedId);
             _feed.feedsWithFundingIndex = feedsWithFunding.length;
         }
@@ -462,15 +462,13 @@ contract Autopay is UsingTellor {
             );
         }
         uint256 _rewardAmount;
-        if (_feed.details.balance >= _feed.details.reward) {
+        if (_feed.details.balance > _feed.details.reward) {
             _rewardAmount = _feed.details.reward;
             _feed.details.balance -= _feed.details.reward;
         } else {
             _rewardAmount = _feed.details.balance;
             _feed.details.balance = 0;
-        }
-        // Adjust currently funded feeds
-        if (_feed.details.balance < _feed.details.reward) {
+            // Adjust currently funded feeds
             if (feedsWithFunding.length > 1) {
                 uint256 idx = _feed.details.feedsWithFundingIndex - 1;
                 // Replace unfunded feed in array with last element
