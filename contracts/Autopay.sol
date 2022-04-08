@@ -225,7 +225,6 @@ contract Autopay is UsingTellor {
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
-        _feed.feedsWithFundingIndex = 0;
 
         currentFeeds[_queryId].push(_feedId);
         queryIdFromDataFeedId[_feedId] = _queryId;
