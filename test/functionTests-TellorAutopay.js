@@ -287,7 +287,6 @@ describe("Autopay - function tests", () => {
   it("getFundedFeeds", async () => {
     // Check one existing funded feed
     let feedIds = await autopay.getFundedFeeds()
-    console.log("one feed id", feedIds)
     assert(feedIds.length == 1, "should be one funded feed from previous test")
     let qId = await autopay.getQueryIdFromFeedId(feedIds[0])
     assert(qId == QUERYID1, "incorrect query ID")
@@ -309,7 +308,6 @@ describe("Autopay - function tests", () => {
     await autopay.fundFeed(feedId3,QUERYID3,h.toWei("1"))
     await autopay.fundFeed(feedId4,QUERYID4,h.toWei("1"))
     feedIds = await autopay.getFundedFeeds()
-    console.log("3 feedIds",feedIds)
     assert(feedIds.length == 3, "should be two funded feeds")
     assert(feedIds[1] == feedId3, "incorrect second funded feed")
     assert(feedIds[2] == feedId4, "incorrect third funded feed")
@@ -320,7 +318,6 @@ describe("Autopay - function tests", () => {
     await h.advanceTime(43200);
     await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [_block.timestamp])
     feedIds = await autopay.getFundedFeeds()
-    console.log("2 feedIds",feedIds)
     assert(feedIds.length == 2, "should be two funded feeds")
     assert(feedIds[1] == feedId4, "incorrect second funded feed query ID")
   });
