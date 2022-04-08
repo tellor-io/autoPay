@@ -160,11 +160,6 @@ contract Autopay is UsingTellor {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
         require(_feed.reward > 0, "feed not set up");
         _feed.balance += _amount;
-        // Add to array of feeds with funding
-        if (_feed.feedsWithFundingIndex == 0) {
-            feedsWithFunding.push(_feedId);
-            _feed.feedsWithFundingIndex = feedsWithFunding.length;
-        }
         require(
             IERC20(_feed.token).transferFrom(
                 msg.sender,
@@ -173,6 +168,11 @@ contract Autopay is UsingTellor {
             ),
             "ERC20: transfer amount exceeds balance"
         );
+        // Add to array of feeds with funding
+        if (_feed.feedsWithFundingIndex == 0 && _feed.balance >= _feed.reward) {
+            feedsWithFunding.push(_feedId);
+            _feed.feedsWithFundingIndex = feedsWithFunding.length;
+        }
         emit DataFeedFunded(_feedId, _queryId, _amount);
     }
 
