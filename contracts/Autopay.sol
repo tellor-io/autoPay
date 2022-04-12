@@ -14,6 +14,7 @@ import "./interfaces/IERC20.sol";
 contract Autopay is UsingTellor {
     // Storage
     ITellor public master; // Tellor contract address
+    IERC20 public token; // TRB token address
     address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
@@ -49,19 +50,21 @@ contract Autopay is UsingTellor {
         bytes _queryData,
         address _feedCreator
     );
-    event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount);
-    event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount);
+    event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount, address _feedFunder);
+    event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount, address _reporter);
     event TipAdded(
         address _token,
         bytes32 _queryId,
         uint256 _amount,
-        bytes _queryData
+        bytes _queryData,
+        address _tipper
     );
     event TipClaimed(
         bytes32 _feedId,
         bytes32 _queryId,
         address _token,
-        uint256 _amount
+        uint256 _amount,
+        address _reporter
     );
 
     // Functions
@@ -73,10 +76,12 @@ contract Autopay is UsingTellor {
      */
     constructor(
         address payable _tellor,
+        address _token,
         address _owner,
         uint256 _fee
     ) UsingTellor(_tellor) {
         master = ITellor(_tellor);
+        token = IERC20(_token);
         owner = _owner;
         fee = _fee;
     }
@@ -107,7 +112,7 @@ contract Autopay is UsingTellor {
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
         ));
         require(IERC20(_token).transfer(owner, (_cumulativeReward * fee) / 1000));
-        emit OneTimeTipClaimed(_queryId, _token, _cumulativeReward);
+        emit OneTimeTipClaimed(_queryId, _token, _cumulativeReward, msg.sender);
     }
 
     /**
@@ -140,7 +145,7 @@ contract Autopay is UsingTellor {
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
         ));
         require(IERC20(_feed.token).transfer(owner, (_cumulativeReward * fee) / 1000));
-        emit TipClaimed(_feedId, _queryId, _feed.token, _cumulativeReward);
+        emit TipClaimed(_feedId, _queryId, _feed.token, _cumulativeReward, _reporter);
     }
 
     /**
@@ -165,12 +170,11 @@ contract Autopay is UsingTellor {
             ),
             "ERC20: transfer amount exceeds balance"
         );
-        emit DataFeedFunded(_feedId, _queryId, _amount);
+        emit DataFeedFunded(_feedId, _queryId, _amount, msg.sender);
     }
 
     /**
      * @dev Initializes dataFeed parameters.
-     * @param _token address of ERC20 token used for tipping
      * @param _queryId id of specific desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
@@ -180,7 +184,6 @@ contract Autopay is UsingTellor {
      * @param _queryData the data used by reporters to fulfill the query
      */
     function setupDataFeed(
-        address _token,
         bytes32 _queryId,
         uint256 _reward,
         uint256 _startTime,
@@ -196,7 +199,7 @@ contract Autopay is UsingTellor {
         bytes32 _feedId = keccak256(
             abi.encode(
                 _queryId,
-                _token,
+                address(token),
                 _reward,
                 _startTime,
                 _interval,
@@ -211,14 +214,14 @@ contract Autopay is UsingTellor {
             _window < _interval,
             "window must be less than interval length"
         );
-        _feed.token = _token;
+        _feed.token = address(token);
         _feed.reward = _reward;
         _feed.startTime = _startTime;
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
         currentFeeds[_queryId].push(_feedId);
-        emit NewDataFeed(_token, _queryId, _feedId, _queryData, msg.sender);
+        emit NewDataFeed(address(token), _queryId, _feedId, _queryData, msg.sender);
     }
 
     /**
@@ -254,7 +257,7 @@ contract Autopay is UsingTellor {
             IERC20(_token).transferFrom(msg.sender, address(this), _amount),
             "ERC20: transfer amount exceeds balance"
         );
-        emit TipAdded(_token, _queryId, _amount, _queryData);
+        emit TipAdded(_token, _queryId, _amount, _queryData, msg.sender);
     }
 
     /**
