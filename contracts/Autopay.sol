@@ -14,24 +14,21 @@ import "./interfaces/IERC20.sol";
 contract Autopay is UsingTellor {
     // Storage
     ITellor public master; // Tellor contract address
+    IERC20 public token; // TRB token address
     address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryID to dataFeedID to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryID to dataFeedIDs array
     mapping(bytes32 => mapping(address => Tip[])) public tips; // mapping queryID to token address to tips
-    mapping(bytes32 => bytes32) queryIdFromDataFeedId; // mapping dataFeedID to queryID
-    bytes32[] public feedsWithFunding; // array of dataFeedIDs that have funding
     // Structs
     struct FeedDetails {
-        address token; // token used for tipping
         uint256 reward; // amount paid for each eligible data submission
         uint256 balance; // account remaining balance
         uint256 startTime; // time of first payment window
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
         uint256 priceThreshold; //change in price necessitating an update 100 = 1%
-        uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
     }
 
     struct Feed {
@@ -46,24 +43,24 @@ contract Autopay is UsingTellor {
 
     // Events
     event NewDataFeed(
-        address _token,
         bytes32 _queryId,
         bytes32 _feedId,
-        bytes _queryData
+        bytes _queryData,
+        address _feedCreator
     );
-    event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount);
-    event OneTimeTipClaimed(bytes32 _queryId, address _token, uint256 _amount);
+    event DataFeedFunded(bytes32 _queryId, bytes32 _feedId, uint256 _amount, address _feedFunder);
+    event OneTimeTipClaimed(bytes32 _queryId, uint256 _amount, address _reporter);
     event TipAdded(
-        address _token,
         bytes32 _queryId,
         uint256 _amount,
-        bytes _queryData
+        bytes _queryData,
+        address _tipper
     );
     event TipClaimed(
         bytes32 _feedId,
         bytes32 _queryId,
-        address _token,
-        uint256 _amount
+        uint256 _amount,
+        address _reporter
     );
 
     // Functions
@@ -75,50 +72,49 @@ contract Autopay is UsingTellor {
      */
     constructor(
         address payable _tellor,
+        address _token,
         address _owner,
         uint256 _fee
     ) UsingTellor(_tellor) {
         master = ITellor(_tellor);
+        token = IERC20(_token);
         owner = _owner;
         fee = _fee;
     }
 
-
-     /**
+    /**
      * @dev Function to claim singular tip
-     * @param _token address of token tipped
-     * @param _queryId ID of reported data
-     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
+     * @param _queryId id of reported data
+     * @param _timestamps ID of timestamps you reported for
      */
     function claimOneTimeTip(
-        address _token,
         bytes32 _queryId,
         uint256[] calldata _timestamps
     ) external {
         require(
-            tips[_queryId][_token].length > 0,
+            tips[_queryId][address(token)].length > 0,
             "no tips submitted for this token and queryId"
         );
         uint256 _reward;
         uint256 _cumulativeReward;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            (_reward) = _claimOneTimeTip(_token, _queryId, _timestamps[_i]);
+            (_reward) = _claimOneTimeTip(_queryId, _timestamps[_i]);
             _cumulativeReward += _reward;
         }
-        require(IERC20(_token).transfer(
+        require(token.transfer(
             msg.sender,
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
         ));
-        require(IERC20(_token).transfer(owner, (_cumulativeReward * fee) / 1000));
-        emit OneTimeTipClaimed(_queryId, _token, _cumulativeReward);
+        require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
+        emit OneTimeTipClaimed(_queryId, _cumulativeReward, msg.sender);
     }
 
     /**
      * @dev Allows Tellor reporters to claim their tips in batches
      * @param _reporter address of Tellor reporter
-     * @param _feedId unique feed identifier
-     * @param _queryId ID of reported data
-     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
+     * @param _feedId unique dataFeed Id
+     * @param _queryId id of reported data
+     * @param _timestamps[] timestamps array of reported data eligible for reward
      */
     function claimTip(
         address _reporter,
@@ -138,19 +134,19 @@ contract Autopay is UsingTellor {
             );
             _cumulativeReward += _reward;
         }
-        require(IERC20(_feed.token).transfer(
+        require(token.transfer(
             _reporter,
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
         ));
-        require(IERC20(_feed.token).transfer(owner, (_cumulativeReward * fee) / 1000));
-        emit TipClaimed(_feedId, _queryId, _feed.token, _cumulativeReward);
+        require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
+        emit TipClaimed(_feedId, _queryId, _cumulativeReward, _reporter);
     }
 
     /**
      * @dev Allows dataFeed account to be filled with tokens
-     * @param _feedId unique feed identifier
-     * @param _queryId identifier of reported data type associated with feed
-     * @param _amount quantity of tokens to fund feed
+     * @param _feedId unique dataFeed Id for queryId
+     * @param _queryId id of reported data associated with feed
+     * @param _amount quantity of tokens to fund feed account
      */
     function fundFeed(
         bytes32 _feedId,
@@ -161,25 +157,19 @@ contract Autopay is UsingTellor {
         require(_feed.reward > 0, "feed not set up");
         _feed.balance += _amount;
         require(
-            IERC20(_feed.token).transferFrom(
+            token.transferFrom(
                 msg.sender,
                 address(this),
                 _amount
             ),
             "ERC20: transfer amount exceeds balance"
         );
-        // Add to array of feeds with funding
-        if (_feed.feedsWithFundingIndex == 0 && _feed.balance > 0) {
-            feedsWithFunding.push(_feedId);
-            _feed.feedsWithFundingIndex = feedsWithFunding.length;
-        }
-        emit DataFeedFunded(_feedId, _queryId, _amount);
+        emit DataFeedFunded(_feedId, _queryId, _amount, msg.sender);
     }
 
     /**
      * @dev Initializes dataFeed parameters.
-     * @param _token address of ERC20 token used for tipping
-     * @param _queryId unique identifier of desired data feed
+     * @param _queryId id of specific desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
@@ -188,7 +178,6 @@ contract Autopay is UsingTellor {
      * @param _queryData the data used by reporters to fulfill the query
      */
     function setupDataFeed(
-        address _token,
         bytes32 _queryId,
         uint256 _reward,
         uint256 _startTime,
@@ -204,7 +193,6 @@ contract Autopay is UsingTellor {
         bytes32 _feedId = keccak256(
             abi.encode(
                 _queryId,
-                _token,
                 _reward,
                 _startTime,
                 _interval,
@@ -219,27 +207,22 @@ contract Autopay is UsingTellor {
             _window < _interval,
             "window must be less than interval length"
         );
-        _feed.token = _token;
         _feed.reward = _reward;
         _feed.startTime = _startTime;
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
-
         currentFeeds[_queryId].push(_feedId);
-        queryIdFromDataFeedId[_feedId] = _queryId;
-        emit NewDataFeed(_token, _queryId, _feedId, _queryData);
+        emit NewDataFeed(_queryId, _feedId, _queryData, msg.sender);
     }
 
     /**
      * @dev Function to run a single tip
-     * @param _token address of token to tip
-     * @param _queryId ID of tipped data
+     * @param _queryId id of tipped data
      * @param _amount amount to tip
      * @param _queryData the data used by reporters to fulfill the query
      */
     function tip(
-        address _token,
         bytes32 _queryId,
         uint256 _amount,
         bytes calldata _queryData
@@ -248,7 +231,7 @@ contract Autopay is UsingTellor {
             _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
             "id must be hash of bytes data"
         );
-        Tip[] storage _tips = tips[_queryId][_token];
+        Tip[] storage _tips = tips[_queryId][address(token)];
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp));
         } else {
@@ -261,29 +244,11 @@ contract Autopay is UsingTellor {
             }
         }
         require(
-            IERC20(_token).transferFrom(msg.sender, address(this), _amount),
+            token.transferFrom(msg.sender, address(this), _amount),
             "ERC20: transfer amount exceeds balance"
         );
-        emit TipAdded(_token, _queryId, _amount, _queryData);
+        emit TipAdded(_queryId, _amount, _queryData, msg.sender);
     }
-
-
-    /**
-    * @dev Getter function for currently funded feeds
-    */
-    function getFundedFeeds() external view returns (bytes32[] memory) {
-        return feedsWithFunding;
-    }
-
-    /**
-    * @dev getter function to lookup query IDs from dataFeed IDs
-    * @param _feedId dataFeed unique identifier
-    * @return corresponding query ID
-    */
-    function getQueryIdFromFeedId(bytes32 _feedId) external view returns (bytes32) {
-        return queryIdFromDataFeedId[_feedId];
-    }
-
 
     /**
      * @dev Getter function to read current data feeds
@@ -301,17 +266,16 @@ contract Autopay is UsingTellor {
     /**
      * @dev Getter function to current oneTime tip by queryId
      * @param _queryId id of reported data
-     * @param _token address of tipped token
      * @return amount of tip
      */
-    function getCurrentTip(bytes32 _queryId, address _token)
+    function getCurrentTip(bytes32 _queryId)
         external
         view
         returns (uint256)
     {
         (, , uint256 _timestampRetrieved) = getCurrentValue(_queryId);
-        Tip memory _lastTip = tips[_queryId][_token][
-            tips[_queryId][_token].length - 1
+        Tip memory _lastTip = tips[_queryId][address(token)][
+            tips[_queryId][address(token)].length - 1
         ];
         if (_timestampRetrieved < _lastTip.timestamp) {
             return _lastTip.amount;
@@ -337,44 +301,40 @@ contract Autopay is UsingTellor {
     /**
      * @dev Getter function to get number of past tips
      * @param _queryId id of reported data
-     * @param _token address of tipped token
      * @return count of tips available
      */
-    function getPastTipCount(bytes32 _queryId, address _token)
+    function getPastTipCount(bytes32 _queryId)
         external
         view
         returns (uint256)
     {
-        return tips[_queryId][_token].length;
+        return tips[_queryId][address(token)].length;
     }
 
     /**
      * @dev Getter function for past tips
      * @param _queryId id of reported data
-     * @param _token address of tipped token
      * @return Tip struct (amount/timestamp) of all past tips
      */
-    function getPastTips(bytes32 _queryId, address _token)
+    function getPastTips(bytes32 _queryId)
         external
         view
         returns (Tip[] memory)
     {
-        return tips[_queryId][_token];
+        return tips[_queryId][address(token)];
     }
 
     /**
      * @dev Getter function for past tips by index
      * @param _queryId id of reported data
-     * @param _token address of tipped token
      * @param _index uint index in the Tip array
      * @return amount/timestamp of specific tip
      */
     function getPastTipByIndex(
         bytes32 _queryId,
-        address _token,
         uint256 _index
     ) external view returns (Tip memory) {
-        return tips[_queryId][_token][_index];
+        return tips[_queryId][address(token)][_index];
     }
 
     /**
@@ -462,22 +422,12 @@ contract Autopay is UsingTellor {
             );
         }
         uint256 _rewardAmount;
-        if (_feed.details.balance > _feed.details.reward) {
+        if (_feed.details.balance >= _feed.details.reward) {
             _rewardAmount = _feed.details.reward;
             _feed.details.balance -= _feed.details.reward;
         } else {
             _rewardAmount = _feed.details.balance;
             _feed.details.balance = 0;
-            // Adjust currently funded feeds
-            if (feedsWithFunding.length > 1) {
-                uint256 idx = _feed.details.feedsWithFundingIndex - 1;
-                // Replace unfunded feed in array with last element
-                feedsWithFunding[idx] = feedsWithFunding[feedsWithFunding.length - 1];
-                bytes32 _feedIdLastFunded = feedsWithFunding[idx];
-                bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
-                dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
-            }
-            feedsWithFunding.pop();
         }
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
@@ -485,17 +435,15 @@ contract Autopay is UsingTellor {
 
     /**
      ** @dev Internal function which allows Tellor reporters to claim their one time tips
-     * @param _token address of tipped token
      * @param _queryId id of reported data
      * @param _timestamp timestamp of one time tip
      * @return amount of tip
      */
     function _claimOneTimeTip(
-        address _token,
         bytes32 _queryId,
         uint256 _timestamp
     ) internal returns (uint256) {
-        Tip[] storage _tips = tips[_queryId][_token];
+        Tip[] storage _tips = tips[_queryId][address(token)];
         require(
             block.timestamp - _timestamp > 12 hours,
             "buffer time has not passed"
