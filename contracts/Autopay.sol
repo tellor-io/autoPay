@@ -20,7 +20,7 @@ contract Autopay is UsingTellor {
 
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryID to dataFeedID to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryID to dataFeedIDs array
-    mapping(bytes32 => mapping(address => Tip[])) public tips; // mapping queryID to token address to tips
+    mapping(bytes32 => Tip[]) public tips; // mapping queryID to tips
     mapping(bytes32 => bytes32) queryIdFromDataFeedId; // mapping dataFeedID to queryID
     bytes32[] public feedsWithFunding; // array of dataFeedIDs that have funding
     // Structs
@@ -95,8 +95,8 @@ contract Autopay is UsingTellor {
         uint256[] calldata _timestamps
     ) external {
         require(
-            tips[_queryId][address(token)].length > 0,
-            "no tips submitted for this token and queryId"
+            tips[_queryId].length > 0,
+            "no tips submitted for this queryId"
         );
         uint256 _reward;
         uint256 _cumulativeReward;
@@ -241,7 +241,7 @@ contract Autopay is UsingTellor {
             _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
             "id must be hash of bytes data"
         );
-        Tip[] storage _tips = tips[_queryId][address(token)];
+        Tip[] storage _tips = tips[_queryId];
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp));
         } else {
@@ -300,8 +300,8 @@ contract Autopay is UsingTellor {
         returns (uint256)
     {
         (, , uint256 _timestampRetrieved) = getCurrentValue(_queryId);
-        Tip memory _lastTip = tips[_queryId][address(token)][
-            tips[_queryId][address(token)].length - 1
+        Tip memory _lastTip = tips[_queryId][
+            tips[_queryId].length - 1
         ];
         if (_timestampRetrieved < _lastTip.timestamp) {
             return _lastTip.amount;
@@ -334,7 +334,7 @@ contract Autopay is UsingTellor {
         view
         returns (uint256)
     {
-        return tips[_queryId][address(token)].length;
+        return tips[_queryId].length;
     }
 
     /**
@@ -347,7 +347,7 @@ contract Autopay is UsingTellor {
         view
         returns (Tip[] memory)
     {
-        return tips[_queryId][address(token)];
+        return tips[_queryId];
     }
 
     /**
@@ -360,7 +360,7 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         uint256 _index
     ) external view returns (Tip memory) {
-        return tips[_queryId][address(token)][_index];
+        return tips[_queryId][_index];
     }
 
     /**
@@ -479,7 +479,7 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         uint256 _timestamp
     ) internal returns (uint256) {
-        Tip[] storage _tips = tips[_queryId][address(token)];
+        Tip[] storage _tips = tips[_queryId];
         require(
             block.timestamp - _timestamp > 12 hours,
             "buffer time has not passed"
