@@ -14,12 +14,13 @@ Run `setUpFeed` then `fundFeed`
 
     /**
      * @param _token address of ERC20 token used for tipping
-     * @param _queryId id of specific desired data feet
+     * @param _queryId unique identifier of desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
      * @param _interval amount of time between autopay windows
      * @param _window amount of time after each new interval when reports are eligible for tips
-     */
+     * @param _priceThreshold amount price must change to automate update regardless of time (negated if 0, 100 = 1%)
+     * @param _queryData the data used by reporters to fulfill the query
     function setupDataFeed(
         address _token,
         bytes32 _queryId,
@@ -27,6 +28,7 @@ Run `setUpFeed` then `fundFeed`
         uint256 _startTime,
         uint256 _interval,
         uint256 _window,
+        uint256 _priceThreshold,
         bytes calldata _queryData
     )
 
@@ -34,9 +36,9 @@ Run `setUpFeed` then `fundFeed`
 
 
     /**
-     * @param _feedId unique dataFeed Id for queryId
-     * @param _queryId id of reported data associated with feed
-     * @param _amount quantity of tokens to fund feed account
+     * @param _feedId unique feed identifier
+     * @param _queryId identifier of reported data type associated with feed
+     * @param _amount quantity of tokens to fund feed
      */
     function fundFeed(
         bytes32 _feedId,
@@ -54,28 +56,30 @@ To tip a queryId, giving the tip to the next reporter to sumbit for that ID, run
 
     /** 
      * @param _token address of token to tip
-     * @param _queryId id of tipped data
+     * @param _queryId ID of tipped data
      * @param _amount amount to tip
+     * @param _queryData the data used by reporters to fulfill the query
      */
     function tip(
         address _token,
         bytes32 _queryId,
-        uint256 _amount
+        uint256 _amount,
+        bytes calldata _queryData
     ) external {
 
 ```
 
 
-### Recieve rewards as a reporter
+### Receive rewards as a reporter
 
-To recieve fees from a recurring feed: 
+To receive fees from a recurring feed: 
 
 ```solidity 
 
     /**
      * @param _reporter address of Tellor reporter
-     * @param _feedId unique dataFeed Id
-     * @param _queryId id of reported data
+     * @param _feedId unique feed identifier
+     * @param _queryId ID of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimTip(
@@ -87,14 +91,14 @@ To recieve fees from a recurring feed:
 
 ```
 
-To recieve fees from a one time tip: 
+To receive fees from a one time tip: 
 
 ```solidity 
 
     /**
      * @param _token address of token tipped
-     * @param _queryId id of reported data
-     * @param _timestamps ID of timestamps you reported for
+     * @param _queryId ID of reported data
+     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimOneTimeTip(
         address _token,
