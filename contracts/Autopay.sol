@@ -114,13 +114,11 @@ contract Autopay is UsingTellor {
 
     /**
      * @dev Allows Tellor reporters to claim their tips in batches
-     * @param _reporter address of Tellor reporter
      * @param _feedId unique feed identifier
      * @param _queryId ID of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimTip(
-        address _reporter,
         bytes32 _feedId,
         bytes32 _queryId,
         uint256[] calldata _timestamps
@@ -132,17 +130,17 @@ contract Autopay is UsingTellor {
             _reward = _claimTip(_feedId, _queryId, _timestamps[_i]);
             require(
                 master.getReporterByTimestamp(_queryId, _timestamps[_i]) ==
-                    _reporter,
+                    msg.sender,
                 "reporter mismatch"
             );
             _cumulativeReward += _reward;
         }
         require(token.transfer(
-            _reporter,
+            msg.sender,
             _cumulativeReward - ((_cumulativeReward * fee) / 1000)
         ));
         require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
-        emit TipClaimed(_feedId, _queryId, _cumulativeReward, _reporter);
+        emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
     }
 
     /**
@@ -456,12 +454,12 @@ contract Autopay is UsingTellor {
             _feed.details.balance = 0;
             // Adjust currently funded feeds
             if (feedsWithFunding.length > 1) {
-                uint256 idx = _feed.details.feedsWithFundingIndex - 1;
+                uint256 _idx = _feed.details.feedsWithFundingIndex - 1;
                 // Replace unfunded feed in array with last element
-                feedsWithFunding[idx] = feedsWithFunding[feedsWithFunding.length - 1];
-                bytes32 _feedIdLastFunded = feedsWithFunding[idx];
+                feedsWithFunding[_idx] = feedsWithFunding[feedsWithFunding.length - 1];
+                bytes32 _feedIdLastFunded = feedsWithFunding[_idx];
                 bytes32 _queryIdLastFunded = queryIdFromDataFeedId[_feedIdLastFunded];
-                dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = idx;
+                dataFeed[_queryIdLastFunded][_feedIdLastFunded].details.feedsWithFundingIndex = _idx;
             }
             feedsWithFunding.pop();
         }

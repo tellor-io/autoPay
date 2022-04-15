@@ -61,9 +61,9 @@ describe("Autopay - function tests", () => {
     // Advancing time 12 hours to satisfy hardcoded buffer time.
     await h.advanceTime(43200);
     // Expect throw cause of bad timestamp values.
-    await h.expectThrow(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, badArray));
+    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, badArray));
     // Testing Events emitted and claiming tips for later checks.
-    await expect(autopay.connect(accounts[1]).claimTip(accounts[1].address, bytesId, QUERYID1, array)).to.emit(autopay, "TipClaimed").withArgs(bytesId, QUERYID1, (h.toWei("3")), accounts[1].address);
+    await expect(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array)).to.emit(autopay, "TipClaimed").withArgs(bytesId, QUERYID1, (h.toWei("3")), accounts[1].address);
     let payerAfter = await autopay.getDataFeed(bytesId, QUERYID1);
     expect(payerBefore.balance).to.not.equal(payerAfter.balance);
     expect(payerAfter.balance).to.equal(h.toWei("999997"));
@@ -81,16 +81,16 @@ describe("Autopay - function tests", () => {
     let result;
     let dataFeedAfter;
     let claimedStatus;
-    await h.expectThrow(autopay.claimTip(accounts[10].address, bytesId, QUERYID1, array));
+    await h.expectThrow(autopay.connect(accounts[10]).claimTip(bytesId, QUERYID1, array));
     h.advanceTime(43200);
-    await autopay.claimTip(accounts[1].address, bytesId, QUERYID1, array);
-    await h.expectThrow(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, array));
+    await autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array);
+    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array));
     bytesId = keccak256(abiCoder.encode(["string"], ["Joshua"]));
-    result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, array));
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array));
     assert.include(result.message, "insufficient feed balance");
     bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0]));
     blockyNoVal = await h.getBlock()
-    result = await h.expectThrowMessage(autopay.claimTip(accounts[1].address, bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)]));
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)]));
     assert.include(result.message, "no value exists at timestamp");
     blocky = await h.getBlock();
     await autopay.connect(accounts[10]).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,"0x");
@@ -105,13 +105,13 @@ describe("Autopay - function tests", () => {
     await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky = await h.getBlock();
     h.advanceTime(43201);
-    result = await h.expectThrowMessage(autopay.claimTip(accounts[3].address, bytesId, QUERYID1, [blocky.timestamp]));
+    result = await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, QUERYID1, [blocky.timestamp]));
     assert.include(result.message, "timestamp not within window");
-    result = await h.expectThrowMessage(autopay.claimTip(accounts[2].address, bytesId, QUERYID1, [badBlocky.timestamp]));
+    result = await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, QUERYID1, [badBlocky.timestamp]));
     assert.include(result.message, "timestamp not first report within window");
     // Variable updates
     dataFeedBefore = await autopay.getDataFeed(bytesId, QUERYID1);
-    await autopay.claimTip(accounts[1].address, bytesId, QUERYID1, [goodBlocky.timestamp]);
+    await autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [goodBlocky.timestamp]);
     dataFeedAfter = await autopay.getDataFeed(bytesId, QUERYID1);
     claimedStatus = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,goodBlocky.timestamp);
     expect(dataFeedAfter.balance).to.equal(h.toWei("99"));
@@ -156,7 +156,7 @@ describe("Autopay - function tests", () => {
     result = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,v);
     expect(result).to.be.false;
     h.advanceTime(86400)
-    await autopay.claimTip(accounts[1].address,bytesId, QUERYID1, [v]);
+    await autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [v]);
     result = await autopay.getRewardClaimedStatus(bytesId,QUERYID1,v);
     expect(result).to.be.true;
   });
@@ -316,7 +316,7 @@ describe("Autopay - function tests", () => {
     await tellor.connect(accounts[2]).submitValue(QUERYID3, h.uintTob32(1234), 0, "0x");
     _block = await h.getBlock();
     await h.advanceTime(43200);
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [_block.timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [_block.timestamp])
     feedIds = await autopay.getFundedFeeds()
     assert(feedIds.length == 2, "should be two funded feeds")
     assert(feedIds[1] == feedId4, "incorrect second funded feed query ID")
