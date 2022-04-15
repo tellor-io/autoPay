@@ -13,7 +13,6 @@ Run `setUpFeed` then `fundFeed`
 ```solidity 
 
     /**
-     * @param _token address of ERC20 token used for tipping
      * @param _queryId unique identifier of desired data feed
      * @param _reward tip amount per eligible data submission
      * @param _startTime timestamp of first autopay window
@@ -22,7 +21,6 @@ Run `setUpFeed` then `fundFeed`
      * @param _priceThreshold amount price must change to automate update regardless of time (negated if 0, 100 = 1%)
      * @param _queryData the data used by reporters to fulfill the query
     function setupDataFeed(
-        address _token,
         bytes32 _queryId,
         uint256 _reward,
         uint256 _startTime,
@@ -55,13 +53,11 @@ To tip a queryId, giving the tip to the next reporter to sumbit for that ID, run
 ```solidity 
 
     /** 
-     * @param _token address of token to tip
      * @param _queryId ID of tipped data
      * @param _amount amount to tip
      * @param _queryData the data used by reporters to fulfill the query
      */
     function tip(
-        address _token,
         bytes32 _queryId,
         uint256 _amount,
         bytes calldata _queryData
@@ -96,12 +92,10 @@ To receive fees from a one time tip:
 ```solidity 
 
     /**
-     * @param _token address of token tipped
      * @param _queryId ID of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
     function claimOneTimeTip(
-        address _token,
         bytes32 _queryId,
         uint256[] calldata _timestamps
     )
