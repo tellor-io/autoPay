@@ -130,12 +130,12 @@ it("single queryID, multiple refills, pulls", async function() {
   await h.advanceTime(3600 * 12)
   // make sure can't claim invalid tips, interval1
   for (i = 1; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId, QUERYID1, [blockyArray1[i].timestamp])); // "timestamp not first report within window"
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId, QUERYID1, [blockyArray1[i].timestamp])); // "timestamp not first report within window"
   }
   assert(await token.balanceOf(autopay.address) - h.toWei("10000000000") == 0, "Autopay contract balance should not change")
   assert(await token.balanceOf(accounts[2].address) == 0, "Reporter balance should still be zero")
   // valid claim tip, interval1
-  await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId, QUERYID1, [blockyArray1[0].timestamp])
+  await autopay.connect(accounts[2]).claimTip(feedId, QUERYID1, [blockyArray1[0].timestamp])
 
   assert(await token.balanceOf(autopay.address) - h.toWei("9999999999") == 0, "Autopay contract balance should not change")
   assert(await token.balanceOf(accounts[2].address) - reward1MinusFee == 0, "Reporter balance should update correctly")
@@ -240,15 +240,15 @@ it("multiple queryID's, several disputes and refills", async function() {
   }
   // make sure can't claim any tips before dispute buffer queryID 1
   for (i = 0; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
   }
   // make sure can't claim any tips before dispute buffer queryID 2
   for (i = 0; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
   }
   // make sure can't claim any tips before dispute buffer queryID 3
   for (i = 0; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
   }
   // advance time to next interval
   await h.advanceTime(interval1)
@@ -269,21 +269,21 @@ it("multiple queryID's, several disputes and refills", async function() {
   }
   // make sure can't claim any tips before dispute buffer queryID 1
   for (i = 0; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
   }
   // make sure can't claim any tips before dispute buffer queryID 2
   for (i = 0; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
   }
   // make sure can't claim any tips before dispute buffer queryID 3
   for (i = 0; i < 10; i++) {
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
   }
   // claim tip interval 1 queryID 1
   ownerBalanceBefore = await token.balanceOf(accounts[0].address)
   autopayBalanceBefore = await token.balanceOf(autopay.address)
-  await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
-  await h.expectThrow(autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])) // tip already claimed
+  await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
+  await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])) // tip already claimed
   assert(await token.balanceOf(accounts[2].address) == h.toWei("0.99"), "Reporter balance should update correctly")
   ownerBalanceAfter = await token.balanceOf(accounts[0].address);
   assert((ownerBalanceAfter.sub(ownerBalanceBefore) - h.toWei("0.01")) == 0, "Owner balance should update correctly")
@@ -297,10 +297,10 @@ it("multiple queryID's, several disputes and refills", async function() {
   }
   // ensure can't claim tips for disputed value
   for (i = 0; i < 3; i++) {
-    await h.expectThrow(autopay.claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])) // value with given timestamp doesn't exist
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])) // value with given timestamp doesn't exist
   }
   // claim tip for undisputed valid value
-  await autopay.claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[3].timestamp])
+  await autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray1QID2[3].timestamp])
 });
 
   it("multiple queryID's, refills, pulls", async function() {
@@ -365,30 +365,30 @@ it("multiple queryID's, several disputes and refills", async function() {
     }
     // make sure can't claim any tips before dispute buffer queryID 1
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 2
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 3
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
     }
     // advance time 1 interval
     await h.advanceTime(interval1)
     // make sure can't claim any tips before dispute buffer queryID 1
     for (i = 1; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1,QUERYID1, [blockyArray1QID1[i].timestamp])); // buffer time hasn't  passed
     }
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
     // make sure can't claim any tips queryID 2
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray1QID2[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 3
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray1QID3[i].timestamp])); // buffer time hasn't  passed
     }
     // add 2 tips
     await autopay.tip(h.uintTob32(4), h.toWei("1"),'0x')
@@ -414,33 +414,33 @@ it("multiple queryID's, several disputes and refills", async function() {
     }
     // make sure can't claim any tips before dispute buffer queryID 1
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 2
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 3
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
     }
     // advance time 1 interval
     await h.advanceTime(interval1)
     // make sure can't claim invalid tips queryID 1
     for (i = 1; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray2QID1[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 2
     for (i = 1; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray2QID2[i].timestamp])); // buffer time hasn't  passed
     }
     // make sure can't claim any tips queryID 3
     for (i = 0; i < 10; i++) {
-      await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
+      await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray2QID3[i].timestamp])); // buffer time hasn't  passed
     }
     // claim 3 good tips
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray2QID1[0].timestamp])
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray2QID2[0].timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray2QID1[0].timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray2QID2[0].timestamp])
     await autopay.connect(accounts[2]).claimOneTimeTip(h.uintTob32(4), [blockyTip1.timestamp])
     // refill 3 datafeed accounts
     await autopay.fundFeed(feedId1, QUERYID1, h.toWei("10"));
@@ -475,9 +475,9 @@ it("multiple queryID's, several disputes and refills", async function() {
     await autopay.fundFeed(feedId2, QUERYID2, h.toWei("100"));
     await autopay.fundFeed(feedId3, QUERYID3, h.toWei("100"));
     // claim 4 good tips
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId2, QUERYID2, [blockyArray1QID2[0].timestamp])
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId3, QUERYID3, [blockyArray1QID3[0].timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blockyArray1QID1[0].timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId2, QUERYID2, [blockyArray1QID2[0].timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray1QID3[0].timestamp])
     await autopay.connect(accounts[2]).claimOneTimeTip(h.uintTob32(4), [blockyTip2.timestamp])
 
     feedDetails1 = await autopay.getDataFeed(feedId1, QUERYID1)
@@ -505,35 +505,35 @@ it("multiple queryID's, several disputes and refills", async function() {
     firstBlocky = await h.getBlock();
     //can grab right away (change from zero)
     await h.advanceTime(86400/2)
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address,feedId1, QUERYID1, [firstBlocky.timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])
     await h.advanceTime(86400/2)
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
     firstBlocky = await h.getBlock();
     //revert on not enough change
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp]))
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp]))
     await h.advanceTime(86400)
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
     firstBlocky = await h.getBlock();
     //not enough change but goes through on time
     await h.advanceTime(86400/2)
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(200), 0, "0x");
     firstBlocky = await h.getBlock();
     //enough change, gets paid out
       //new price > old price
       await h.advanceTime(86400/2)
-      await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])
+      await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])
       await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(50), 0, "0x");
       firstBlocky = await h.getBlock();
       await h.advanceTime(86400/2)
       //old price > new price
-      await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])
+      await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])
     //values are not bytes values
     bytesData = abiCoder.encode(["bytes32","uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0])
     await tellor.connect(accounts[2]).submitValue(QUERYID1,bytesData, 0, "0x");
     firstBlocky = await h.getBlock();
     await h.advanceTime(86400/2)
-    await autopay.connect(accounts[2]).claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])
   });
 
   it("more priceChange tests", async function() {
@@ -545,18 +545,18 @@ it("multiple queryID's, several disputes and refills", async function() {
     // up threshold
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
     firstBlocky = await h.getBlock();
-    await h.expectThrow(autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp])) // buffer time not passed
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])) // buffer time not passed
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(106), 0, "0x")
     secondBlocky = await h.getBlock();
     await h.advanceTime(86400/2)
-    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp])
     // down threshold
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x")
     firstBlocky = await h.getBlock();
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(94), 0, "0x")
     secondBlocky = await h.getBlock();
     await h.advanceTime(86400/2)
-    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp])
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp])
     // up down down up up - up bad
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x")
     firstBlocky = await h.getBlock();
@@ -574,8 +574,8 @@ it("multiple queryID's, several disputes and refills", async function() {
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(108), 0, "0x")
     firstBlockyBad = await h.getBlock()
     await h.advanceTime(86400/2)
-    await autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp, thirdBlocky.timestamp, fourthBlocky.timestamp, fifthBlocky.timestamp, sixthBlocky.timestamp])
-    await h.expectThrow(autopay.claimTip(accounts[2].address, feedId1, QUERYID1, [firstBlockyBad.timestamp])) // threshold not met, not first within window
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp, secondBlocky.timestamp, thirdBlocky.timestamp, fourthBlocky.timestamp, fifthBlocky.timestamp, sixthBlocky.timestamp])
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlockyBad.timestamp])) // threshold not met, not first within window
   });
 
 });
