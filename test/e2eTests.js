@@ -155,7 +155,7 @@ it("single queryID, multiple refills, pulls", async function() {
   await token.mint(accounts[0].address, h.toWei("1000000"))
   await token.approve(autopay.address, h.toWei("1000000"))
   await autopay.fundFeed(feedId, QUERYID1, h.toWei("1000000"));
-  feedDetails = await autopay.getDataFeed(feedId, QUERYID1)
+  feedDetails = await autopay.getDataFeed(feedId)
   assert(feedDetails.reward == reward1, "Recorded reward amount should be correct")
   assert(feedDetails.balance == h.toWei("10000999999"), "Recorded feed balance should be correct")
   // submit another value (eligible for tip)
@@ -480,9 +480,9 @@ it("multiple queryID's, several disputes and refills", async function() {
     await autopay.connect(accounts[2]).claimTip(feedId3, QUERYID3, [blockyArray1QID3[0].timestamp])
     await autopay.connect(accounts[2]).claimOneTimeTip(h.uintTob32(4), [blockyTip2.timestamp])
 
-    feedDetails1 = await autopay.getDataFeed(feedId1, QUERYID1)
-    feedDetails2 = await autopay.getDataFeed(feedId2, QUERYID2)
-    feedDetails3 = await autopay.getDataFeed(feedId3, QUERYID3)
+    feedDetails1 = await autopay.getDataFeed(feedId1)
+    feedDetails2 = await autopay.getDataFeed(feedId2)
+    feedDetails3 = await autopay.getDataFeed(feedId3)
     pastTips = await autopay.getPastTips(h.uintTob32(4))
 
     expect(feedDetails1.balance).to.equal(h.toWei("19"))
