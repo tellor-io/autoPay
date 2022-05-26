@@ -21,6 +21,7 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryId to dataFeedId to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryId to dataFeedIds array
     mapping(bytes32 => Tip[]) public tips; // mapping queryId to tips
+    mapping(bytes32 => keeperTip) public keeperTips; // mapping queryId to keeperTip
     mapping(bytes32 => bytes32) public queryIdFromDataFeedId; // mapping dataFeedId to queryId
     mapping(bytes32 => uint256) public queryIdsWithFundingIndex; // mapping queryId to queryIdsWithFunding index plus one (0 if not in array)
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
@@ -71,6 +72,17 @@ contract Autopay is UsingTellor {
         bytes _queryData,
         address _tipper
     );
+    event KeeperTipAdded(
+        bytes32 _queryId,
+        uint256 _amount,
+        bytes _queryData,
+        address _tipper
+    );
+    event KeeperTipClaimed(
+        bytes32 _queryId,
+        uint256 _amount,
+        address _keeper
+    );
     event TipClaimed(
         bytes32 _feedId,
         bytes32 _queryId,
@@ -95,6 +107,73 @@ contract Autopay is UsingTellor {
         token = IERC20(_token);
         owner = _owner;
         fee = _fee;
+    }
+    
+    struct keeperTip {
+        uint256 amount;
+        uint256 timestamp;
+        uint256 whenTimestamp; // Timestamp for when to call the function after
+    }
+
+    /**
+     * @dev Helper checks if query data is for a function call
+     * @param _queryData The query data used to fulfill report
+     */
+    function _isTellorKpr(bytes calldata _queryData) internal pure returns (bool _isFunctionCall, uint256 _whenToCallIt){
+        (string memory _type, bytes memory _data) = abi.decode(_queryData, (string, bytes));
+        ( , , , uint256 _timestamp) = abi.decode(_data, (address,bytes,uint256,uint256));
+        if(keccak256(abi.encode(_type)) == keccak256(abi.encode("TellorKpr"))) {
+          _isFunctionCall = true;
+          _whenToCallIt = _timestamp;
+        }
+    }
+
+    /** 
+    * @dev Function to tip keepers to maintain a function
+    * @param _queryId ID of tipped data
+    * @param _amount Amount to tip
+    * @param _queryData The data used by reporters to fulfill the query
+    */
+    function tipKeeper(bytes32 _queryId, uint256 _amount, bytes calldata _queryData) external {
+        (bool _isFunctionCall, uint256 _whenToCallIt) = _isTellorKpr(_queryData);
+        require(_isFunctionCall, "Not a function call");
+        require(_queryId == keccak256(_queryData), "id must be hash of bytes data");
+        if (keeperTips[_queryId].amount == 0) {
+            keeperTips[_queryId] = (keeperTip(_amount, block.timestamp, _whenToCallIt));
+        } else {
+            keeperTips[_queryId].amount += _amount;
+            require(
+            token.transferFrom(msg.sender, address(this), _amount),
+            "ERC20: transfer amount exceeds balance"
+        );
+        emit KeeperTipAdded(_queryId, _amount, _queryData, msg.sender);
+        }
+    }
+   
+    function _keeperClaimTip(bytes32 _queryId, uint256 _timestamp) internal {
+        keeperTip memory _keeperTips = keeperTips[_queryId];
+        require(
+            block.timestamp - _timestamp > 12 hours,
+            "buffer time has not passed"
+        );
+        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
+        require(
+            keccak256(_valueRetrieved) != keccak256(bytes("")),
+            "no value exists at timestamp"
+        );
+        ( , address _keeperAddress, uint256 _whenItWasCalled) = abi.decode(_valueRetrieved, (bytes32,address,uint256));
+        // require msg.sender is keeper
+        require(msg.sender == _keeperAddress, "Not keeper!");
+        // require submitted timestamp is after submit timestamp
+        uint256 _whenToCallIt = _keeperTips.whenTimestamp;
+        require(_whenItWasCalled > _whenToCallIt, "Function called before its time!");
+        require(_keeperTips.amount > 0, "tips already claimed");
+        uint256 _tipAmount = _keeperTips.amount;
+        require(token.transfer(msg.sender, _tipAmount - ((_tipAmount * fee) / 1000)));
+        require(token.transfer(owner, (_tipAmount * fee) / 1000));
+        emit KeeperTipClaimed(_queryId, _tipAmount, msg.sender);
+
+        
     }
 
     /**
