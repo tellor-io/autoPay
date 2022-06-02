@@ -71,6 +71,12 @@ contract Autopay is UsingTellor {
         bytes _queryData,
         address _tipper
     );
+    event TipClaimed(
+        bytes32 _feedId,
+        bytes32 _queryId,
+        uint256 _amount,
+        address _reporter
+    );
     event KeeperTipAdded(
         uint256 _amount,
         bytes32 _queryId,
@@ -91,15 +97,9 @@ contract Autopay is UsingTellor {
     );
     event KeeperJobFunded (
         address _employer,
-        uint256 _tip,
+        uint256 _amount,
         bytes32 _queryId,
         bytes32 _jobId
-    );
-    event TipClaimed(
-        bytes32 _feedId,
-        bytes32 _queryId,
-        uint256 _amount,
-        address _reporter
     );
 
     // Functions
@@ -125,7 +125,7 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => mapping(bytes32 => KeeperJobDetails)) jobs; // mapping jobId to queryId to JobDetails
     struct keeperTip {
         uint256 amount;
-        uint256 timestamp;
+        uint256 timestamp; // current timestamp
         uint256 whenTimestamp; // Timestamp for when to call the function after
         uint256 maxGasCovered; // Max gas price keeper is recommended to pay in payment token
     }
