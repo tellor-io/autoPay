@@ -230,7 +230,6 @@ contract Autopay is UsingTellor {
                 _interval,
                 _payment,
                 _maxGasCovered
-                // _maxGasCovered
             ));
             KeeperJobDetails storage _job = jobs[_jobId][_queryId];
             require(_job.payment == 0, "job id already exists, fund Job");
