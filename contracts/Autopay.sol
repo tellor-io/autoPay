@@ -23,6 +23,8 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => Tip[]) public tips; // mapping queryId to tips
     mapping(bytes32 => bytes32) public queryIdFromDataFeedId; // mapping dataFeedId to queryId
     mapping(bytes32 => uint256) public queryIdsWithFundingIndex; // mapping queryId to queryIdsWithFunding index plus one (0 if not in array)
+    mapping(bytes32 => keeperTip) public keeperTips; // mapping queryId to keeperTip
+    mapping(bytes32 => mapping(bytes32 => KeeperJobDetails)) jobs; // mapping jobId to queryId to JobDetails
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
     bytes32[] public queryIdsWithFunding; // array of queryIds that have funding
 
@@ -45,6 +47,22 @@ contract Autopay is UsingTellor {
     struct Tip {
         uint256 amount;
         uint256 timestamp;
+    }
+
+    struct keeperTip {
+        uint256 amount;
+        uint256 timestamp; // current timestamp
+        uint256 timeToCallIt; // Timestamp for when to call the function after
+        uint256 maxGasCovered; // Max gas price keeper is recommended to pay in payment token
+    }
+
+    struct KeeperJobDetails {
+        uint256 timeToCallIt;
+        uint256 interval;
+        uint256 window;
+        uint256 payment;
+        uint256 balance;
+        uint256 gasCovered;
     }
 
     // Events
@@ -126,24 +144,7 @@ contract Autopay is UsingTellor {
         owner = _owner;
         fee = _fee;
     }
-    
-    mapping(bytes32 => keeperTip) public keeperTips; // mapping queryId to keeperTip
-    mapping(bytes32 => mapping(bytes32 => KeeperJobDetails)) jobs; // mapping jobId to queryId to JobDetails
-    struct keeperTip {
-        uint256 amount;
-        uint256 timestamp; // current timestamp
-        uint256 timeToCallIt; // Timestamp for when to call the function after
-        uint256 maxGasCovered; // Max gas price keeper is recommended to pay in payment token
-    }
 
-    struct KeeperJobDetails {
-        uint256 timeToCallIt;
-        uint256 interval;
-        uint256 window;
-        uint256 payment;
-        uint256 balance;
-        uint256 gasCovered;
-    }
 
     /** 
     * @dev Function to tip keepers to call a function
@@ -179,6 +180,7 @@ contract Autopay is UsingTellor {
             }
     }
     /**
+    * @dev Function for claiming a single function call tip
     * @param _queryId ID of query to claim tip for
     */
     function keeperClaimTip(bytes32 _queryId) external {
@@ -211,6 +213,15 @@ contract Autopay is UsingTellor {
     }
     // function getJobBalance() external view returns { return _job.balance}
     /**
+    @dev Function for setting up a function call job
+    @param _contractAddress Address of smart contract
+    @param _functionSig Function signature data
+    @param _maxGasCovered Maximum amount of gas a keeper is able to claim
+    @param _timeToCallIt Timestamp of when the function needs to be called
+    @param _chainId Chain ID for the chain where the contract exists
+    @param _window Time in seconds of the size of window for when the function needs to be triggered
+    @param _interval Time in seconds of how often the function needs to be triggered
+    @param _payment Payment amount for each function call
     */
     function setupKeeperJob(
         address _contractAddress,
@@ -247,8 +258,14 @@ contract Autopay is UsingTellor {
   
             emit NewKeeperJob(msg.sender, _jobId, _queryData, _queryId, _payment);
 
-        }
+    }
     
+    /**
+    @dev Function for funding jobs that have already been setup
+    @param _amount Amount of payment for calling the function excluding gas
+    @param _queryId ID of function data and details
+    @param _jobId ID of queryId and function(job) details
+    */
     function fundJob(
         uint256 _amount,
         bytes32 _queryId,
@@ -262,25 +279,29 @@ contract Autopay is UsingTellor {
         require(token.transferFrom(msg.sender, address(this), _tipAndGas), "ERC20: transfer amount exceeds balance");
         emit KeeperJobFunded(msg.sender, _amount, _queryId, _jobId);
     }
+
+    /**
+    @dev Function for claiming tips for jobs, can be called by anyone
+    @param _jobId Hash of the queryId and the job details
+    @param _queryId Id of reported data
+    */
     function claimJobTips(bytes32 _jobId, bytes32 _queryId) external {
         KeeperJobDetails storage _job = jobs[_jobId][_queryId];
+        ( , , uint256 _timestampBeforeStart) = getDataBefore(_queryId, _job.timeToCallIt);
         // getTimestampIndexByTimestamp
-        uint256 _beginTimestampIndex = master.getTimestampIndexByTimestamp(_queryId, _job.timeToCallIt);
+        uint256 _beginTimestampIndex = master.getTimestampIndexByTimestamp(_queryId, _timestampBeforeStart + 1);
         // getNewValueCountbyQueryId
         uint256 _timestampsCount = getNewValueCountbyQueryId(_queryId);
         for(uint i = _beginTimestampIndex; i < _timestampsCount; i++) {
             uint256 _paymentAmount;
             uint256 _submissionTimestamp = getTimestampbyQueryIdandIndex(_queryId, i);
             bytes memory _valueRetrieved = retrieveData(_queryId, _submissionTimestamp);
-            // Since the submitValue on TellorFlex is always the first keeper address to make the call
-            // just check if the function called timestamp is in the window also may be no need.
             ( , address _keeperAddress, uint256 _whenItWasCalled, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
             uint256 _interval = (_whenItWasCalled - _job.timeToCallIt) / _job.interval; // finds closest interval _n to timestamp
             uint256 _window = _job.timeToCallIt + _job.interval * _interval;
             if((_whenItWasCalled - _window) < _job.window) {
                 // if balance > 0
-                // transfer the balance
-                // add buffer
+                // TODO: add buffer
                 if (_gasPaid >= _job.gasCovered) {
                     _paymentAmount = _job.payment + _job.gasCovered;
                 } else {
@@ -290,9 +311,9 @@ contract Autopay is UsingTellor {
                 require(token.transfer(_keeperAddress, _paymentAmount - ((_paymentAmount * fee) / 1000)));
                 require(token.transfer(owner, (_paymentAmount * fee) / 1000));
                 emit JobPaid(_jobId, _queryId, _paymentAmount, _keeperAddress);
-                }
             }
         }
+    }
 
     /**
      * @dev Function to claim singular tip
