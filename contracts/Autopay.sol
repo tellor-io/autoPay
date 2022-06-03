@@ -101,6 +101,12 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         bytes32 _jobId
     );
+    event JobPaid(
+        bytes32 _jobId,
+        bytes32 _queryId,
+        uint256 _payment,
+        address _keeper
+    );
 
     // Functions
     /**
@@ -126,7 +132,7 @@ contract Autopay is UsingTellor {
     struct keeperTip {
         uint256 amount;
         uint256 timestamp; // current timestamp
-        uint256 whenTimestamp; // Timestamp for when to call the function after
+        uint256 timeToCallIt; // Timestamp for when to call the function after
         uint256 maxGasCovered; // Max gas price keeper is recommended to pay in payment token
     }
 
@@ -189,7 +195,7 @@ contract Autopay is UsingTellor {
         );
         ( , address _keeperAddress, uint256 _whenItWasCalled, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
         // require submitted timestamp is after submit timestamp
-        uint256 _whenToCallIt = _keeperTips.whenTimestamp;
+        uint256 _whenToCallIt = _keeperTips.timeToCallIt;
         require(_whenItWasCalled > _whenToCallIt, "Function called before its time!");
         uint256 _tipAmount;
         require(_keeperTips.amount > 0, "tips already claimed");
@@ -256,6 +262,37 @@ contract Autopay is UsingTellor {
         require(token.transferFrom(msg.sender, address(this), _tipAndGas), "ERC20: transfer amount exceeds balance");
         emit KeeperJobFunded(msg.sender, _amount, _queryId, _jobId);
     }
+    function claimJobTips(bytes32 _jobId, bytes32 _queryId) external {
+        KeeperJobDetails storage _job = jobs[_jobId][_queryId];
+        // getTimestampIndexByTimestamp
+        uint256 _beginTimestampIndex = master.getTimestampIndexByTimestamp(_queryId, _job.timeToCallIt);
+        // getNewValueCountbyQueryId
+        uint256 _timestampsCount = getNewValueCountbyQueryId(_queryId);
+        for(uint i = _beginTimestampIndex; i < _timestampsCount; i++) {
+            uint256 _paymentAmount;
+            uint256 _submissionTimestamp = getTimestampbyQueryIdandIndex(_queryId, i);
+            bytes memory _valueRetrieved = retrieveData(_queryId, _submissionTimestamp);
+            // Since the submitValue on TellorFlex is always the first keeper address to make the call
+            // just check if the function called timestamp is in the window also may be no need.
+            ( , address _keeperAddress, uint256 _whenItWasCalled, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
+            uint256 _interval = (_whenItWasCalled - _job.timeToCallIt) / _job.interval; // finds closest interval _n to timestamp
+            uint256 _window = _job.timeToCallIt + _job.interval * _interval;
+            if((_whenItWasCalled - _window) < _job.window) {
+                // if balance > 0
+                // transfer the balance
+                // add buffer
+                if (_gasPaid >= _job.gasCovered) {
+                    _paymentAmount = _job.payment + _job.gasCovered;
+                } else {
+                    _paymentAmount = _job.payment + _gasPaid;
+                }
+                _job.balance -= _paymentAmount;
+                require(token.transfer(_keeperAddress, _paymentAmount - ((_paymentAmount * fee) / 1000)));
+                require(token.transfer(owner, (_paymentAmount * fee) / 1000));
+                emit JobPaid(_jobId, _queryId, _paymentAmount, _keeperAddress);
+                }
+            }
+        }
 
     /**
      * @dev Function to claim singular tip
