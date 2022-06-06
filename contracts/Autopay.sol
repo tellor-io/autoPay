@@ -53,7 +53,7 @@ contract Autopay is UsingTellor {
         uint256 timestamp; // current timestamp
         uint256 timeToCallIt; // Timestamp for when to call the function after
         uint256 maxGasCover; // Max gas price keeper is recommended to pay in payment token
-        address tipper;
+        address creator;
     }
 
     struct KeeperJobDetails {
@@ -107,14 +107,14 @@ contract Autopay is UsingTellor {
         address _keeper
     );
     event NewKeeperJob (
-        address _employer,
+        address _creator,
         bytes32 _jobId,
         bytes _queryData,
         bytes32 _queryId,
         uint256 _payment
     );
     event KeeperJobFunded (
-        address _employer,
+        address _creator,
         uint256 _amount,
         bytes32 _queryId,
         bytes32 _jobId
@@ -129,7 +129,7 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         address _creator
     );
-    event AddedExtraTip(
+    event AddedExtraTiptoJob(
         uint256 _amount,
         bytes32 _queryId,
         address _creator
@@ -163,7 +163,7 @@ contract Autopay is UsingTellor {
 
     /** 
     * @dev Function to tip keepers to call a function
-    * @param _maxGasCover The amount of gas covered by tipper in payment token
+    * @param _maxGasCover The amount of gas covered by creator in payment token
     * @param _contractAddress The smart contract address where the function is to be called
     * @param _functionSig The function signature data
     * @param _timeToCallIt The timestamp of when to trigger the function
@@ -201,7 +201,7 @@ contract Autopay is UsingTellor {
     function increaseMaxGasForExistingJob(bytes32 _queryId, uint256 _amount) external {
         KeeperTip storage _keep = keeperTips[_queryId];
         require(_keep.maxGasCover > 0,"Job not setup yet");
-        require(msg.sender == _keep.tipper, "Not job creator");
+        require(msg.sender == _keep.creator, "Not job creator");
         _keep.maxGasCover += _amount;
         require(
             token.transferFrom(msg.sender, address(this), _amount),
@@ -212,20 +212,20 @@ contract Autopay is UsingTellor {
 
     function addTiptoExistingSingleJob(bytes32 _queryId, uint256 _amount) external {
         KeeperTip storage _keep = keeperTips[_queryId];
-        require(msg.sender == _keep.tipper || msg.sender == owner, "Not job creator");
+        require(msg.sender == _keep.creator || msg.sender == owner, "Not job creator");
         require(_keep.amount > 0, "Job doesn't exist");
         _keep.amount += _amount;
         require(
             token.transferFrom(msg.sender, address(this), _amount),
             "ERC20: transfer amount exceeds balance"
             );
-        emit AddedExtraTip(_amount, _queryId, msg.sender);
+        emit AddedExtraTiptoJob(_amount, _queryId, msg.sender);
     }
 
     function unclaimedSingleTipsFallback(bytes32 _queryId) external {
         KeeperTip storage _keep = keeperTips[_queryId];
         require((block.timestamp - _keep.timeToCallIt) >  12 weeks, "Wait 12 weeks to get unclaimed tips");
-        require(msg.sender == _keep.tipper, "Not your job");
+        require(msg.sender == _keep.creator, "Not your job");
         require(_keep.amount > 0, "There are no tips to claim");
         require(
             token.transfer(msg.sender, _keep.amount + _keep.maxGasCover)
@@ -259,7 +259,7 @@ contract Autopay is UsingTellor {
             _tipAmount = _keeperTips.amount + _keeperTips.maxGasCover;
         } else {
             _tipAmount = _gasPaid + _keeperTips.amount;
-            require(token.transfer(_keeperTips.tipper, (_keeperTips.maxGasCover - _gasPaid)));
+            require(token.transfer(_keeperTips.creator, (_keeperTips.maxGasCover - _gasPaid)));
         }
         
         require(token.transfer(_keeperAddress, _tipAmount - ((_tipAmount * fee) / 1000)));
