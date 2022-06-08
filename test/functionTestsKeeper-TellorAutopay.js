@@ -94,12 +94,16 @@ describe("KEEPER - function tests", () => {
         let TIP = web3.utils.toWei("2");
         let JOBID = keccak256(abiCoder.encode(["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,80,TIP]));
         await expect(autopay.initKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,80,TIP)).to.emit(autopay, "NewKeeperJob").withArgs(accounts[0].address,JOBID,QUERYDATA,TIP);
+        let result = await h.expectThrowMessage(autopay.initKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,80,TIP));
+        assert.include(result.message, "job id already exists, fund Job");
     });
 
     it("fundJob", async () => {
+        let contractBal = await token.balanceOf(autopay.address);
         let BAL = await token.balanceOf(accounts[0].address);
         await expect(autopay.fundJob(JOBID,TIP)).to.emit(autopay, "KeeperJobFunded").withArgs(accounts[0].address,TIP,JOBID);
         expect(await token.balanceOf(accounts[0].address)).to.equal(BAL.sub(MAXGASCOVER.add(TIP)));
+        expect(await token.balanceOf(autopay.address)).to.equal(contractBal.add(MAXGASCOVER.add(TIP)));
     });
 
     it("claimJobTips", async () => {
