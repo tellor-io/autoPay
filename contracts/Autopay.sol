@@ -23,7 +23,7 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => bytes32) public queryIdFromDataFeedId; // mapping dataFeedId to queryId
     mapping(bytes32 => uint256) public queryIdsWithFundingIndex; // mapping queryId to queryIdsWithFunding index plus one (0 if not in array)
     mapping(bytes32 => KeeperTip) public keeperTips; // mapping queryId to keeperTip
-    mapping(bytes32 => mapping(bytes32 => KeeperJobDetails)) jobs; // mapping jobId to queryId to JobDetails
+    mapping(bytes32 => KeeperJobDetails) jobs; // mapping jobId to queryId to JobDetails
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
     bytes32[] public queryIdsWithFunding; // array of queryIds that have funding
 
@@ -52,17 +52,21 @@ contract Autopay is UsingTellor {
         uint256 amount;
         uint256 timestamp; // current timestamp
         uint256 timeToCallIt; // Timestamp for when to call the function after
-        uint256 maxGasCover; // Max gas price keeper is recommended to pay in payment token
+        uint256 maxGasRefund; // Max gas price keeper is recommended to pay in payment token
         address creator;
     }
 
     struct KeeperJobDetails {
-        uint256 timeToCallIt;
+        address contractAddress;
+        bytes functionSig;
+        uint256 triggerStart;
+        uint256 chainId;
+        uint256 maxGasRefund;
         uint256 interval;
         uint256 window;
-        uint256 payment;
+        uint256 payReward;
         uint256 balance;
-        uint256 maxGasCover;
+        mapping(uint256 => bool) paid;
     }
 
     // Events
@@ -110,13 +114,11 @@ contract Autopay is UsingTellor {
         address _creator,
         bytes32 _jobId,
         bytes _queryData,
-        bytes32 _queryId,
         uint256 _payment
     );
     event KeeperJobFunded (
         address _creator,
         uint256 _amount,
-        bytes32 _queryId,
         bytes32 _jobId
     );
     event JobPaid(
@@ -158,216 +160,6 @@ contract Autopay is UsingTellor {
         token = IERC20(_token);
         owner = _owner;
         fee = _fee;
-    }
-
-
-    /** 
-    * @dev Function to tip keepers to call a function
-    * @param _maxGasCover The amount of gas covered by creator in payment token
-    * @param _contractAddress The smart contract address where the function is to be called
-    * @param _functionSig The function signature data
-    * @param _timeToCallIt The timestamp of when to trigger the function
-    * @param _chainId The chain id
-    * @param _tip Amount to tip
-    */
-    function tipKeeperJob(
-        uint256 _maxGasCover,
-        address _contractAddress,
-        bytes calldata _functionSig,
-        uint256 _timeToCallIt,
-        uint256 _chainId,
-        uint256 _tip)
-        external {
-            string memory _type = "TellorKpr";
-            bytes memory _encodedArgs = abi.encode(_maxGasCover,_contractAddress,_functionSig,_timeToCallIt,_chainId);
-            bytes memory _queryData = abi.encode(_type,_encodedArgs);
-            bytes32 _queryId = keccak256(_queryData);
-            uint256 _amount;
-            if (keeperTips[_queryId].amount == 0) {
-                _amount = _tip + _maxGasCover;
-                keeperTips[_queryId] = (KeeperTip(_tip, block.timestamp, _timeToCallIt, _maxGasCover, msg.sender));
-            } else {
-                keeperTips[_queryId].amount += _tip;
-                _amount = _tip;
-            }
-            // transfer tip plus gasCover to this contract address
-            require(
-            token.transferFrom(msg.sender, address(this), _amount),
-            "ERC20: transfer amount exceeds balance"
-            );
-            emit KeeperTipAdded(_tip, _queryId, _queryData, msg.sender);
-    }
-
-    function increaseMaxGasForExistingJob(bytes32 _queryId, uint256 _amount) external {
-        KeeperTip storage _keep = keeperTips[_queryId];
-        require(_keep.maxGasCover > 0,"Job not setup yet");
-        require(msg.sender == _keep.creator, "Not job creator");
-        _keep.maxGasCover += _amount;
-        require(
-            token.transferFrom(msg.sender, address(this), _amount),
-            "ERC20: transfer amount exceeds balance"
-            );
-        emit MaxGasCoverIncreased(_amount, _queryId, msg.sender);
-        }
-
-    function addTiptoExistingSingleJob(bytes32 _queryId, uint256 _amount) external {
-        KeeperTip storage _keep = keeperTips[_queryId];
-        require(msg.sender == _keep.creator || msg.sender == owner, "Not job creator");
-        require(_keep.amount > 0, "Job doesn't exist");
-        _keep.amount += _amount;
-        require(
-            token.transferFrom(msg.sender, address(this), _amount),
-            "ERC20: transfer amount exceeds balance"
-            );
-        emit AddedExtraTiptoJob(_amount, _queryId, msg.sender);
-    }
-
-    function unclaimedSingleTipsFallback(bytes32 _queryId) external {
-        KeeperTip storage _keep = keeperTips[_queryId];
-        require((block.timestamp - _keep.timeToCallIt) >  12 weeks, "Wait 12 weeks to get unclaimed tips");
-        require(msg.sender == _keep.creator, "Not your job");
-        require(_keep.amount > 0, "There are no tips to claim");
-        require(
-            token.transfer(msg.sender, _keep.amount + _keep.maxGasCover)
-            );
-        _keep.amount = 0;
-        emit JobRemoved(_queryId, msg.sender);
-    }
-    /**
-    * @dev Function for claiming a single function call tip
-    * @param _queryId ID of query to claim tip for
-    */
-    function keeperClaimTip(bytes32 _queryId) external {
-        uint256 _timestamp = getTimestampbyQueryIdandIndex(_queryId, 0);
-        KeeperTip memory _keeperTips = keeperTips[_queryId];
-        require(
-            block.timestamp - _timestamp > 12 hours,
-            "buffer time has not passed"
-        );
-        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
-        require(
-            keccak256(_valueRetrieved) != keccak256(bytes("")),
-            "no value exists at timestamp"
-        );
-        ( , address _keeperAddress, uint256 _whenItWasCalled, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
-        // require submitted timestamp is after submit timestamp
-        uint256 _whenToCallIt = _keeperTips.timeToCallIt;
-        require(_whenItWasCalled > _whenToCallIt, "Function called before its time!");
-        uint256 _tipAmount;
-        require(_keeperTips.amount > 0, "tips already claimed");
-        if (_gasPaid >= _keeperTips.maxGasCover) {
-            _tipAmount = _keeperTips.amount + _keeperTips.maxGasCover;
-        } else {
-            _tipAmount = _gasPaid + _keeperTips.amount;
-            require(token.transfer(_keeperTips.creator, (_keeperTips.maxGasCover - _gasPaid)));
-        }
-        
-        require(token.transfer(_keeperAddress, _tipAmount - ((_tipAmount * fee) / 1000)));
-        require(token.transfer(owner, (_tipAmount * fee) / 1000));
-        emit KeeperTipClaimed(_queryId, _tipAmount, _keeperAddress);
-    }
-    // function getJobBalance() external view returns { return _job.balance}
-    /**
-    @dev Function for setting up a function call job
-    @param _contractAddress Address of smart contract
-    @param _functionSig Function signature data
-    @param _maxGasCovered Maximum amount of gas a keeper is able to claim
-    @param _timeToCallIt Timestamp of when the function needs to be called
-    @param _chainId Chain ID for the chain where the contract exists
-    @param _window Time in seconds of the size of window for when the function needs to be triggered
-    @param _interval Time in seconds of how often the function needs to be triggered
-    @param _payment Payment amount for each function call
-    */
-    function setupKeeperJob(
-        address _contractAddress,
-        bytes calldata _functionSig,
-        uint256 _maxGasCovered,
-        uint256 _timeToCallIt,
-        uint256 _chainId,
-        uint256 _window, 
-        uint256 _interval,
-        uint256 _payment
-        ) external {
-            string memory _type = "TellorKpr";
-            bytes memory _encodedArgs = abi.encode(_contractAddress,_functionSig,_timeToCallIt,_chainId,_maxGasCovered);
-            bytes memory _queryData = abi.encode(_type,_encodedArgs);
-            bytes32 _queryId = keccak256(_queryData);
-            require(_payment > 0, "No free keeping");
-            require(_interval > _window, "Interval has to be greater than window");
-
-            bytes32 _jobId = keccak256(abi.encode(
-                _queryId,
-                _timeToCallIt,
-                _window,
-                _interval,
-                _payment,
-                _maxGasCovered
-            ));
-            KeeperJobDetails storage _job = jobs[_jobId][_queryId];
-            require(_job.payment == 0, "job id already exists, fund Job");
-            _job.timeToCallIt = _timeToCallIt;
-            _job.interval = _interval;
-            _job.window = _window;
-            _job.payment = _payment;
-            _job.maxGasCover = _maxGasCovered;
-  
-            emit NewKeeperJob(msg.sender, _jobId, _queryData, _queryId, _payment);
-
-    }
-    
-    /**
-    @dev Function for funding jobs that have already been setup
-    @param _amount Amount of payment for calling the function excluding gas
-    @param _queryId ID of function data and details
-    @param _jobId ID of queryId and function(job) details
-    */
-    function fundJob(
-        uint256 _amount,
-        bytes32 _queryId,
-        bytes32 _jobId
-    ) external {
-        KeeperJobDetails storage _job = jobs[_jobId][_queryId];
-        require(_job.payment > 0, "Job hasn't been setup");
-        uint256 _tipAndGas = _amount + _job.maxGasCover;
-        require(_tipAndGas > _job.payment, "Not enough to cover payment");
-        _job.balance += _tipAndGas;
-        require(token.transferFrom(msg.sender, address(this), _tipAndGas), "ERC20: transfer amount exceeds balance");
-        emit KeeperJobFunded(msg.sender, _amount, _queryId, _jobId);
-    }
-
-    /**
-    @dev Function for claiming tips for jobs, can be called by anyone
-    @param _jobId Hash of the queryId and the job details
-    @param _queryId Id of reported data
-    */
-    function claimJobTips(bytes32 _jobId, bytes32 _queryId) external {
-        KeeperJobDetails storage _job = jobs[_jobId][_queryId];
-        ( , , uint256 _timestampBeforeStart) = getDataBefore(_queryId, _job.timeToCallIt);
-        // getTimestampIndexByTimestamp
-        uint256 _beginTimestampIndex = master.getTimestampIndexByTimestamp(_queryId, _timestampBeforeStart + 1);
-        // getNewValueCountbyQueryId
-        uint256 _timestampsCount = getNewValueCountbyQueryId(_queryId);
-        for(uint i = _beginTimestampIndex; i < _timestampsCount; i++) {
-            uint256 _paymentAmount;
-            uint256 _submissionTimestamp = getTimestampbyQueryIdandIndex(_queryId, i);
-            bytes memory _valueRetrieved = retrieveData(_queryId, _submissionTimestamp);
-            ( , address _keeperAddress, uint256 _whenItWasCalled, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
-            uint256 _interval = (_whenItWasCalled - _job.timeToCallIt) / _job.interval; // finds closest interval _n to timestamp
-            uint256 _window = _job.timeToCallIt + _job.interval * _interval;
-            if((_whenItWasCalled - _window) < _job.window) {
-                // if balance > 0
-                // TODO: add buffer
-                if (_gasPaid >= _job.maxGasCover) {
-                    _paymentAmount = _job.payment + _job.maxGasCover;
-                } else {
-                    _paymentAmount = _job.payment + _gasPaid;
-                }
-                _job.balance -= _paymentAmount;
-                require(token.transfer(_keeperAddress, _paymentAmount - ((_paymentAmount * fee) / 1000)));
-                require(token.transfer(owner, (_paymentAmount * fee) / 1000));
-                emit JobPaid(_jobId, _queryId, _paymentAmount, _keeperAddress);
-            }
-        }
     }
 
     /**
@@ -832,5 +624,249 @@ contract Autopay is UsingTellor {
         }
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
+    }
+
+    // KEEPER
+
+    /** 
+    * @dev Function to tip keepers to call a function
+    * @param _functionSig The function signature data
+    * @param _contractAddress The smart contract address where the function is to be called
+    * @param _triggerTime The timestamp of when to trigger the function
+    * @param _chainId The chain id
+    * @param _maxGasRefund The amount of gas covered by creator in payment token
+    * @param _tip Amount to tip
+    */
+    function tipKeeperJob(
+        bytes calldata _functionSig,
+        address _contractAddress,
+        uint256 _chainId,
+        uint256 _triggerTime,
+        uint256 _maxGasRefund,
+        uint256 _tip)
+        external {
+            string memory _type = "TellorKpr";
+            bytes memory _encodedArgs = abi.encode(_functionSig,_contractAddress,_chainId,_triggerTime,_maxGasRefund);
+            bytes memory _queryData = abi.encode(_type,_encodedArgs);
+            bytes32 _queryId = keccak256(_queryData);
+            uint256 _amount;
+            if (keeperTips[_queryId].amount == 0) {
+                _amount = _tip + _maxGasRefund;
+                keeperTips[_queryId] = (KeeperTip(_tip, block.timestamp, _triggerTime, _maxGasRefund, msg.sender));
+            } else {
+                keeperTips[_queryId].amount += _tip;
+                _amount = _tip;
+            }
+            // transfer tip plus gasCover to this contract address
+            require(
+            token.transferFrom(msg.sender, address(this), _amount),
+            "ERC20: transfer amount exceeds balance"
+            );
+            emit KeeperTipAdded(_tip, _queryId, _queryData, msg.sender);
+    }
+
+    function increaseMaxGasForExistingJob(bytes32 _queryId, uint256 _amount) external {
+        KeeperTip storage _keep = keeperTips[_queryId];
+        require(_keep.maxGasRefund > 0,"Job not setup yet");
+        require(msg.sender == _keep.creator, "Not job creator");
+        _keep.maxGasRefund += _amount;
+        require(
+            token.transferFrom(msg.sender, address(this), _amount),
+            "ERC20: transfer amount exceeds balance"
+            );
+        emit MaxGasCoverIncreased(_amount, _queryId, msg.sender);
+        }
+
+    function addTiptoExistingSingleJob(bytes32 _queryId, uint256 _amount) external {
+        KeeperTip storage _keep = keeperTips[_queryId];
+        // require(msg.sender == _keep.creator || msg.sender == owner, "Not job creator");
+        require(_keep.amount > 0, "Job doesn't exist");
+        _keep.amount += _amount;
+        require(
+            token.transferFrom(msg.sender, address(this), _amount),
+            "ERC20: transfer amount exceeds balance"
+            );
+        emit AddedExtraTiptoJob(_amount, _queryId, msg.sender);
+    }
+
+    // function unclaimedSingleTipsFallback(bytes32 _queryId) external {
+    //     KeeperTip storage _keep = keeperTips[_queryId];
+    //     require((block.timestamp - _keep.timeToCallIt) >  12 weeks, "Wait 12 weeks to get unclaimed tips");
+    //     require(msg.sender == _keep.creator, "Not your job");
+    //     require(_keep.amount > 0, "There are no tips to claim");
+    //     require(
+    //         token.transfer(msg.sender, _keep.amount + _keep.maxGasCover)
+    //         );
+    //     _keep.amount = 0;
+    //     emit JobRemoved(_queryId, msg.sender);
+    // }
+    /**
+    * @dev Function for claiming a single function call tip
+    * @param _queryId ID of query to claim tip for
+    */
+    function keeperClaimTip(bytes32 _queryId) external {
+        uint256 _timestamp = getTimestampbyQueryIdandIndex(_queryId, 0);
+        KeeperTip memory _keeperTips = keeperTips[_queryId];
+        require(
+            block.timestamp - _timestamp > 12 hours,
+            "buffer time has not passed"
+        );
+        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
+        require(
+            keccak256(_valueRetrieved) != keccak256(bytes("")),
+            "no value exists at timestamp"
+        );
+        ( , address _keeperAddress, uint256 _whenItWasCalled, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
+        require(
+            keccak256(_valueRetrieved) != keccak256(bytes("")),
+            "no value exists at timestamp"
+        );
+        // require submitted timestamp is after submit timestamp
+        uint256 _whenToCallIt = _keeperTips.timeToCallIt;
+        require(_whenItWasCalled > _whenToCallIt, "Function called before its time!");
+        uint256 _tipAmount;
+        require(_keeperTips.amount > 0, "No tips available");
+        if (_gasPaid >= _keeperTips.maxGasRefund) {
+            _tipAmount = _keeperTips.amount + _keeperTips.maxGasRefund;
+        } else {
+            _tipAmount = _gasPaid + _keeperTips.amount;
+            require(token.transfer(_keeperTips.creator, (_keeperTips.maxGasRefund - _gasPaid)));
+        }
+        
+        require(token.transfer(_keeperAddress, _tipAmount - ((_tipAmount * fee) / 1000)));
+        require(token.transfer(owner, (_tipAmount * fee) / 1000));
+        emit KeeperTipClaimed(_queryId, _tipAmount, _keeperAddress);
+    }
+    // function getJobBalance() external view returns { return _job.balance}
+    /**
+    * @dev Function for setting up a function call job
+    * @param _contractAddress Address of smart contract
+    * @param _functionSig Function signature data
+    * @param _maxGasRefund Maximum amount of gas a keeper is able to claim
+    * @param _triggerStart Timestamp of when the function needs to be called
+    * @param _chainId Chain ID for the chain where the contract exists
+    * @param _window Time in seconds of the size of window for when the function needs to be triggered
+    * @param _interval Time in seconds of how often the function needs to be triggered
+    * @param _payReward Payment amount for each function call
+    */
+    function initKeeperJob(
+        bytes calldata _functionSig,
+        address _contractAddress,
+        uint256 _chainId,
+        uint256 _triggerStart,
+        uint256 _maxGasRefund,
+        uint256 _window, 
+        uint256 _interval,
+        uint256 _payReward
+        ) external {
+            string memory _type = "TellorKpr";
+            bytes memory _encodedArgs = abi.encode(_functionSig,_contractAddress,_chainId,_triggerStart,_maxGasRefund);
+            bytes memory _queryData = abi.encode(_type,_encodedArgs);
+            require(_payReward > 0, "No free keeping");
+            require(_interval > _window, "Interval has to be greater than window");
+
+            bytes32 _jobId = keccak256(abi.encode(
+                _functionSig,
+                _contractAddress,
+                _chainId,
+                _triggerStart,
+                _maxGasRefund,
+                _window,
+                _interval,
+                _payReward
+            ));
+            KeeperJobDetails storage _job = jobs[_jobId];
+            require(_job.payReward == 0, "job id already exists, fund Job");
+            _job.contractAddress = _contractAddress;
+            _job.functionSig = _functionSig;
+            _job.triggerStart = _triggerStart;
+            _job.chainId = _chainId;
+            _job.maxGasRefund = _maxGasRefund;
+            _job.interval = _interval;
+            _job.window = _window;
+            _job.payReward = _payReward;
+  
+            emit NewKeeperJob(msg.sender, _jobId, _queryData, _payReward);
+
+    }
+    
+    /**
+    @dev Function for funding jobs that have already been setup
+    @param _amount Amount of payment for calling the function excluding gas
+    @param _jobId ID of queryId and function(job) details
+    */
+    function fundJob(
+        bytes32 _jobId,
+        uint256 _amount
+    ) external {
+        KeeperJobDetails storage _job = jobs[_jobId];
+        require(_job.payReward > 0, "Job not initiated");
+        uint256 _tipNGas = _amount + _job.maxGasRefund;
+        require(_tipNGas > _job.payReward, "Not enough to cover payment");
+        _job.balance += _tipNGas;
+        require(token.transferFrom(msg.sender, address(this), _tipNGas), "ERC20: transfer amount exceeds balance");
+        emit KeeperJobFunded(msg.sender, _amount, _jobId);
+    }
+
+    /**
+    * @notice Reporter queryId submission to oracle uses the triggerTimestamp not startTime(_triggerStart)
+    * @dev Function for claiming tips for jobs, can be called by anyone
+    * @param _jobId Hash of the queryId and the job details
+    * @param _callTime Timestamp of when keeper triggered function
+    */
+    function claimJobTips(
+        bytes32 _jobId,
+        uint256 _callTime
+    ) external {
+        require(block.timestamp - _callTime > 12 hours, "12 hour buffer not met");
+        KeeperJobDetails storage _j = jobs[_jobId];
+        require(_j.balance > 0, "no balance left");
+        require(!_j.paid[_callTime], "Already paid!");
+        
+        uint256 _interval = (_callTime - _j.triggerStart) / _j.interval; // finds closest interval _n to timestamp
+        uint256 _window = _j.triggerStart + _j.interval * _interval;
+        require((_callTime - _window) < _j.window, "Not within window");
+
+        bytes32 _queryId = _generateQueryId(_jobId,_callTime);
+        
+        uint256 _submissionTimestamp = getTimestampbyQueryIdandIndex(_queryId, 0);
+        
+        bytes memory _valueRetrieved = retrieveData(_queryId, _submissionTimestamp);
+        require(keccak256(_valueRetrieved) != keccak256(bytes("")),"no value exists at timestamp");
+        
+        ( , address _keeperAddress, uint256 _triggerTime, uint256 _gasPaid) = abi.decode(_valueRetrieved, (bytes32,address,uint256,uint256));
+        
+        require(_callTime == _triggerTime, "Timestamp doesn't match");
+        uint256 _paymentAmount;
+        if (_gasPaid >= _j.maxGasRefund) {
+            _paymentAmount = _j.maxGasRefund;
+        } else {
+            _paymentAmount = _gasPaid;
+        }
+        if (_j.balance > _j.payReward) {
+            _paymentAmount += _j.payReward;
+            _j.balance -= _j.payReward;
+        } else {
+            _paymentAmount += _j.balance;
+            _j.balance = 0;
+        }
+        require(token.transfer(_keeperAddress, _paymentAmount - ((_paymentAmount * fee) / 1000)));
+        require(token.transfer(owner, (_paymentAmount * fee) / 1000));
+        _j.paid[_callTime] = true;
+        emit JobPaid(_jobId, _queryId, _paymentAmount, _keeperAddress);
+        
+    }
+
+    /**
+    * @dev Helper function to generate unique queryId for job
+    * @param _j JobID to generate queryId for
+    * @param _t Unique timestamp used to generate queryId
+    */
+    function _generateQueryId(bytes32 _j, uint256 _t) internal view returns (bytes32) {
+        KeeperJobDetails storage _job = jobs[_j];
+        string memory _type = "TellorKpr";
+        bytes memory _encodedArgs = abi.encode(_job.functionSig,_job.contractAddress,_job.chainId,_t,_job.maxGasRefund);
+        bytes memory _queryData = abi.encode(_type,_encodedArgs);
+        return keccak256(_queryData);
     }
 }
