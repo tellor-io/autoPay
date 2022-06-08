@@ -18,7 +18,7 @@ describe("KEEPER - function tests", () => {
     const QUERYDATA = abiCoder.encode(["string","bytes"], [TYPE,ARGS])
     const KPRQUERYID = keccak256(QUERYDATA);
     const TIP = web3.utils.toWei("99");
-    const JOBID = keccak256(abiCoder.encode(["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,60,TIP]));
+    const JOBID = keccak256(abiCoder.encode(["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,400,600,TIP]));
 
 
     beforeEach(async () => {
@@ -36,7 +36,7 @@ describe("KEEPER - function tests", () => {
         await token.approve(autopay.address, h.toWei("1000"));
         blocky = await h.getBlock();
         await autopay.tipKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,TIP);
-        await autopay.initKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,60,TIP);
+        await autopay.initKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,400,600,TIP);
         await autopay.fundJob(JOBID,TIP);
     });
 
@@ -67,7 +67,11 @@ describe("KEEPER - function tests", () => {
         let autopayBefore = await token.balanceOf(autopay.address);
         await autopay.addTiptoExistingSingleJob(KPRQUERYID, MAXGASCOVER);
         expect(await token.balanceOf(autopay.address)).to.equal(autopayBefore.add(MAXGASCOVER));
-        await h.expectThrowMessage(autopay.connect(accounts[1]).addTiptoExistingSingleJob(KPRQUERYID, MAXGASCOVER)); // Not job creator
+        await token.mint(accounts[1].address, h.toWei("10"));
+        await token.connect(accounts[1]).approve(autopay.address, h.toWei("10"));
+        // any address can add a tip to a queryId
+        await autopay.connect(accounts[1]).addTiptoExistingSingleJob(KPRQUERYID, MAXGASCOVER);
+        expect(await token.balanceOf(autopay.address)).to.equal(autopayBefore.add(MAXGASCOVER).add(MAXGASCOVER));
     });
 
     // it("unclaimedSingleTipsFallback", async () => {
