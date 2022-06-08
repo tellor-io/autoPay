@@ -18,7 +18,7 @@ describe("KEEPER - function tests", () => {
     const QUERYDATA = abiCoder.encode(["string","bytes"], [TYPE,ARGS])
     const KPRQUERYID = keccak256(QUERYDATA);
     const TIP = web3.utils.toWei("99");
-    const JOBID = keccak256(abiCoder.encode(["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,30,60,TIP]));
+    const JOBID = keccak256(abiCoder.encode(["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,60,TIP]));
 
 
     beforeEach(async () => {
@@ -36,7 +36,7 @@ describe("KEEPER - function tests", () => {
         await token.approve(autopay.address, h.toWei("1000"));
         blocky = await h.getBlock();
         await autopay.tipKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,TIP);
-        await autopay.initKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,30,60,TIP);
+        await autopay.initKeeperJob(FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,40,60,TIP);
         await autopay.fundJob(JOBID,TIP);
     });
 
@@ -113,10 +113,8 @@ describe("KEEPER - function tests", () => {
         await tellor.connect(accounts[1]).submitValue(QUERYID,VAL,0,QUERYDATA);
         let buffer = await h.expectThrowMessage(autopay.claimJobTips(JOBID, TIMESTAMP));
         assert.include(buffer.message, "12 hour buffer not met");
-        h.advanceTime(43300); // 12 hour buffer plus 100s to test outside of window
+        h.advanceTime(43200); // 12 hour buffer
         await autopay.claimJobTips(JOBID, TIMESTAMP);
-        let window = await h.expectThrowMessage(autopay.claimJobTips(JOBID,(TIMESTAMP+31))); // window 30s interval 60s
-        assert.include(window.message, "Not within window");
         expect(await token.balanceOf(accounts[1].address)).to.equal(bal.add(MAXGASCOVER.add(TIP).sub((MAXGASCOVER.add(TIP).mul(10)).div(1000))));// keeper gets gas + tip minus 1 percent fee
         expect(await token.balanceOf(autopay.owner())).to.equal(ownerBal.add((MAXGASCOVER.add(TIP).mul(10)).div(1000)));// owner collects 1 percent fee
         let paid = await h.expectThrowMessage(autopay.claimJobTips(JOBID,TIMESTAMP));
