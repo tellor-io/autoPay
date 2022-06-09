@@ -637,31 +637,22 @@ contract Autopay is UsingTellor {
     * @param _maxGasRefund The amount of gas covered by creator in payment token
     * @param _tip Amount to tip
     */
-    function tipKeeperJob(
-        bytes calldata _functionSig,
-        address _contractAddress,
-        uint256 _chainId,
-        uint256 _triggerTime,
-        uint256 _maxGasRefund,
-        uint256 _tip)
+    function tipKeeperJob(bytes calldata _functionSig,address _contractAddress,uint256 _chainId,uint256 _triggerTime,uint256 _maxGasRefund,uint256 _tip)
         external {
             string memory _type = "TellorKpr";
             bytes memory _encodedArgs = abi.encode(_functionSig,_contractAddress,_chainId,_triggerTime,_maxGasRefund);
             bytes memory _queryData = abi.encode(_type,_encodedArgs);
             bytes32 _queryId = keccak256(_queryData);
-            uint256 _amount;
-            if (keeperTips[_queryId].amount == 0) {
-                _amount = _tip + _maxGasRefund;
-                keeperTips[_queryId] = (KeeperTip(_tip, block.timestamp, _triggerTime, _maxGasRefund, msg.sender));
+            KeeperTip storage _k = keeperTips[_queryId];
+            if (_k.amount == 0) {
+                keeperTips[_queryId] = KeeperTip(_tip, block.timestamp, _triggerTime, _maxGasRefund, msg.sender);
+                _tip += _maxGasRefund;
             } else {
-                keeperTips[_queryId].amount += _tip;
-                _amount = _tip;
-            }
-            // transfer tip plus gasCover to this contract address
+            _k.amount += _tip;}
+
             require(
-            token.transferFrom(msg.sender, address(this), _amount),
-            "ERC20: transfer amount exceeds balance"
-            );
+            token.transferFrom(msg.sender, address(this), _tip),
+            "ERC20: transfer amount exceeds balance");
             emit KeeperTipAdded(_tip, _queryId, _queryData, msg.sender);
     }
 
@@ -676,18 +667,6 @@ contract Autopay is UsingTellor {
             );
         emit MaxGasCoverIncreased(_amount, _queryId, msg.sender);
         }
-
-    function addTiptoExistingSingleJob(bytes32 _queryId, uint256 _amount) external {
-        KeeperTip storage _keep = keeperTips[_queryId];
-        // require(msg.sender == _keep.creator || msg.sender == owner, "Not job creator");
-        require(_keep.amount > 0, "Job doesn't exist");
-        _keep.amount += _amount;
-        require(
-            token.transferFrom(msg.sender, address(this), _amount),
-            "ERC20: transfer amount exceeds balance"
-            );
-        emit AddedExtraTiptoJob(_amount, _queryId, msg.sender);
-    }
 
     // function unclaimedSingleTipsFallback(bytes32 _queryId) external {
     //     KeeperTip storage _keep = keeperTips[_queryId];
@@ -706,10 +685,10 @@ contract Autopay is UsingTellor {
     */
     function keeperClaimTip(bytes32 _queryId) external {
         uint256 _timestamp = getTimestampbyQueryIdandIndex(_queryId, 0);
-        KeeperTip memory _keeperTips = keeperTips[_queryId];
+        KeeperTip storage _keeperTips = keeperTips[_queryId];
         require(
             block.timestamp - _timestamp > 12 hours,
-            "buffer time has not passed"
+            "12 hour buffer not met"
         );
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
         require(
@@ -722,20 +701,20 @@ contract Autopay is UsingTellor {
             "no value exists at timestamp"
         );
         // require submitted timestamp is after submit timestamp
-        uint256 _whenToCallIt = _keeperTips.timeToCallIt;
-        require(_whenItWasCalled > _whenToCallIt, "Function called before its time!");
-        uint256 _tipAmount;
+        require(_whenItWasCalled > _keeperTips.timeToCallIt, "Function called before its time!");
+
         require(_keeperTips.amount > 0, "No tips available");
         if (_gasPaid >= _keeperTips.maxGasRefund) {
-            _tipAmount = _keeperTips.amount + _keeperTips.maxGasRefund;
+            _keeperTips.amount += _keeperTips.maxGasRefund;
         } else {
-            _tipAmount = _gasPaid + _keeperTips.amount;
+            _keeperTips.amount += _gasPaid;
             require(token.transfer(_keeperTips.creator, (_keeperTips.maxGasRefund - _gasPaid)));
         }
-        
-        require(token.transfer(_keeperAddress, _tipAmount - ((_tipAmount * fee) / 1000)));
-        require(token.transfer(owner, (_tipAmount * fee) / 1000));
-        emit KeeperTipClaimed(_queryId, _tipAmount, _keeperAddress);
+
+        require(token.transfer(_keeperAddress, _keeperTips.amount - ((_keeperTips.amount * fee) / 1000)));
+        require(token.transfer(owner, (_keeperTips.amount * fee) / 1000));
+        _keeperTips.amount = 0;
+        emit KeeperTipClaimed(_queryId, _keeperTips.amount, _keeperAddress);
     }
     // function getJobBalance() external view returns { return _job.balance}
     /**
@@ -868,5 +847,9 @@ contract Autopay is UsingTellor {
         bytes memory _encodedArgs = abi.encode(_job.functionSig,_job.contractAddress,_job.chainId,_t,_job.maxGasRefund);
         bytes memory _queryData = abi.encode(_type,_encodedArgs);
         return keccak256(_queryData);
+    }
+    // Getter
+    function singleJobBalancebyId(bytes32 _queryId) external view returns (KeeperTip memory){
+        return keeperTips[_queryId];
     }
 }

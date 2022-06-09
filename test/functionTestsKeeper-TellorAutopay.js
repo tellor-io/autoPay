@@ -11,13 +11,13 @@ describe("KEEPER - function tests", () => {
     let abiCoder = new ethers.utils.AbiCoder();
 
     const MAXGASCOVER = BigNumber.from((web3.utils.toWei("1")));
+    const TIP = web3.utils.toWei("99");
     const FUNCTIONSIG = "0x57806e707c9ca4cc348680e2d4637472fc51228a079cb8a6a8cba51fe6f4ebbb3a930c8db9d5e25dabd5f0a48f45f5b6b524bac100df05eaf5311f3e5339ac7c3dd0a37e0000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000627abef8"
     const TIMESTAMP = Math.floor(Date.now()/1000);
     const TYPE = "TellorKpr"
     const ARGS = abiCoder.encode(["bytes", "address", "uint256", "uint256", "uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER]);
     const QUERYDATA = abiCoder.encode(["string","bytes"], [TYPE,ARGS])
     const KPRQUERYID = keccak256(QUERYDATA);
-    const TIP = web3.utils.toWei("99");
     const JOBID = keccak256(abiCoder.encode(["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER,400,600,TIP]));
 
 
@@ -40,13 +40,6 @@ describe("KEEPER - function tests", () => {
         await autopay.fundJob(JOBID,TIP);
     });
 
-    it("constructor", async () => {
-        expect(await autopay.master()).to.equal(tellor.address);
-        expect(await autopay.token()).to.equal(token.address);
-        expect(await autopay.owner()).to.equal(accounts[0].address);
-        expect(await autopay.fee()).to.equal(10)
-    });
-
     it("tipKeeperJob", async () => {
         let autopayBalance = await token.balanceOf(autopay.address);
         let acctBeforeBalance = await token.balanceOf(accounts[0].address);
@@ -61,17 +54,6 @@ describe("KEEPER - function tests", () => {
         await autopay.increaseMaxGasForExistingJob(KPRQUERYID, MAXGASCOVER);
         expect(await token.balanceOf(autopay.address)).to.equal(autopayBefore.add(MAXGASCOVER));
         await h.expectThrowMessage(autopay.connect(accounts[1]).increaseMaxGasForExistingJob(KPRQUERYID, MAXGASCOVER)); // Not job creator
-    });
-
-    it("addTiptoExistingSingleJob", async () => {
-        let autopayBefore = await token.balanceOf(autopay.address);
-        await autopay.addTiptoExistingSingleJob(KPRQUERYID, MAXGASCOVER);
-        expect(await token.balanceOf(autopay.address)).to.equal(autopayBefore.add(MAXGASCOVER));
-        await token.mint(accounts[1].address, h.toWei("10"));
-        await token.connect(accounts[1]).approve(autopay.address, h.toWei("10"));
-        // any address can add a tip to a queryId
-        await autopay.connect(accounts[1]).addTiptoExistingSingleJob(KPRQUERYID, MAXGASCOVER);
-        expect(await token.balanceOf(autopay.address)).to.equal(autopayBefore.add(MAXGASCOVER).add(MAXGASCOVER));
     });
 
     // it("unclaimedSingleTipsFallback", async () => {
