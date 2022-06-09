@@ -76,13 +76,9 @@ describe("AutopayKeeper - e2e tests", function() {
         value = abiCoder.encode(["bytes32","address","uint256","uint256"],[keccak256("0x"),accounts[2].address,triggerTime.timestamp,gasPaid]);
         await tellor.connect(accounts[2]).submitValue(queryId2,value,0,queryData2);
         // qid 3
-        triggerTime = await h.getBlock()
-        value = abiCoder.encode(["bytes32","address","uint256","uint256"],[keccak256("0x"),accounts[1].address,triggerTime.timestamp,gasPaid]);
-        await tellor.connect(accounts[3]).submitValue(queryId3,value,0,queryData3);
-
         // called before callTime
-        value = abiCoder.encode(["bytes32","address","uint256","uint256"],[keccak256("0x"),accounts[1].address,(callTime.timestamp-1),gasPaid]);
-        await tellor.connect(accounts[4]).submitValue(queryId3,value,0,queryData3);
+        value = abiCoder.encode(["bytes32","address","uint256","uint256"],[keccak256("0x"),accounts[3].address,(callTime.timestamp-1),gasPaid]);
+        await tellor.connect(accounts[3]).submitValue(queryId3,value,0,queryData3);
 
         // claim tip for each id and check balances
         // id 1
@@ -107,5 +103,8 @@ describe("AutopayKeeper - e2e tests", function() {
         balanceAfter = await token.balanceOf(accounts[2].address);
         expect(balanceAfter).to.equal(balanceBefore.add(web3.utils.toWei("98")).add(web3.utils.toWei("1")).sub(web3.utils.toWei("0.99"))); // keeper gets tip plus gas minus 1 percent
 
+        //id 3
+        message = await h.expectThrowMessage(autopay.keeperClaimTip(queryId3));
+        assert.include(message.message, "Function called before its time!");
     });
 });
