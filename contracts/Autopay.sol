@@ -186,6 +186,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
+        // token.approve(address(master), (_cumulativeReward * fee) / 1000);
+        // master.addStakingRewards((_cumulativeReward * fee) / 1000);
         require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
@@ -231,6 +233,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
+        // token.approve(address(master), (_cumulativeReward * fee) / 1000);
+        // master.addStakingRewards((_cumulativeReward * fee) / 1000);
         require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
         emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
     }
@@ -712,6 +716,8 @@ contract Autopay is UsingTellor {
         }
 
         require(token.transfer(_keeperAddress, _keeperTips.amount - ((_keeperTips.amount * fee) / 1000)));
+        // token.approve(address(master),(_keeperTips.amount * fee) / 1000);
+        // master.addStakingRewards((_keeperTips.amount * fee) / 1000);
         require(token.transfer(owner, (_keeperTips.amount * fee) / 1000));
         _keeperTips.amount = 0;
         emit KeeperTipClaimed(_queryId, _keeperTips.amount, _keeperAddress);
@@ -799,9 +805,8 @@ contract Autopay is UsingTellor {
     ) external {
         require(block.timestamp - _callTime > 12 hours, "12 hour buffer not met");
         KeeperJobDetails storage _j = jobs[_jobId];
-        require(_j.balance > 0, "no balance left");
         require(!_j.paid[_callTime], "Already paid!");
-        
+        require(_j.balance > 0, "no balance left");
         uint256 _interval = (_callTime - _j.triggerStart) / _j.interval; // finds closest interval _n to timestamp
         uint256 _window = _j.triggerStart + _j.interval * _interval;
         require((_callTime - _window) < _j.window, "Not within window");
@@ -809,7 +814,7 @@ contract Autopay is UsingTellor {
         bytes32 _queryId = _generateQueryId(_jobId,_callTime);
         
         uint256 _submissionTimestamp = getTimestampbyQueryIdandIndex(_queryId, 0);
-        
+        require(block.timestamp - _submissionTimestamp > 12 hours, "12 hour wait submitValue");
         bytes memory _valueRetrieved = retrieveData(_queryId, _submissionTimestamp);
         require(keccak256(_valueRetrieved) != keccak256(bytes("")),"no value exists at timestamp");
         
@@ -817,19 +822,29 @@ contract Autopay is UsingTellor {
         
         require(_callTime == _triggerTime, "Timestamp doesn't match");
         uint256 _paymentAmount;
+        uint256 _gasRemainder;
         if (_gasPaid >= _j.maxGasRefund) {
             _paymentAmount = _j.maxGasRefund;
+            _gasRemainder = 0;
         } else {
             _paymentAmount = _gasPaid;
+            _gasRemainder = _j.maxGasRefund - _gasPaid;
         }
-        if (_j.balance > _j.payReward) {
+        if (_j.balance >= (_j.payReward + _gasRemainder) && _gasRemainder > 0){
             _paymentAmount += _j.payReward;
-            _j.balance -= _j.payReward;
+            _j.balance -= _gasRemainder;
+            _j.balance -= _paymentAmount;
+            require(token.transfer(owner, _gasRemainder));
+        }else if (_j.balance > _j.payReward) {
+            _paymentAmount += _j.payReward;
+            _j.balance -= _paymentAmount;
         } else {
             _paymentAmount += _j.balance;
             _j.balance = 0;
         }
         require(token.transfer(_keeperAddress, _paymentAmount - ((_paymentAmount * fee) / 1000)));
+        // token.approve(address(master), (_paymentAmount * fee) / 1000);
+        // master.addStakingRewards((_paymentAmount * fee) / 1000);
         require(token.transfer(owner, (_paymentAmount * fee) / 1000));
         _j.paid[_callTime] = true;
         emit JobPaid(_jobId, _queryId, _paymentAmount, _keeperAddress);
@@ -849,7 +864,13 @@ contract Autopay is UsingTellor {
         return keccak256(_queryData);
     }
     // Getter
-    function singleJobBalancebyId(bytes32 _queryId) external view returns (KeeperTip memory){
+    function singleJobbyId(bytes32 _queryId) external view returns (KeeperTip memory){
         return keeperTips[_queryId];
+    }
+
+    function continuousJobbyId(bytes32 _jobId) external view returns (bytes memory,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)
+    {
+        KeeperJobDetails storage _j = jobs[_jobId];
+        return (_j.functionSig,_j.contractAddress,_j.chainId,_j.triggerStart,_j.maxGasRefund,_j.window,_j.interval,_j.payReward,_j.balance);
     }
 }

@@ -41,6 +41,7 @@ describe("KEEPER - function tests", () => {
     });
 
     it("claimJobTips", async () => {
+        let fee = ((MAXGASCOVER.add(TIP)).mul(await autopay.fee())).div(1000);
         let TIMESTAMP = blocky.timestamp;// timestamp of when keeper triggered call
         let args = abiCoder.encode(["bytes", "address", "uint256", "uint256", "uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER])
         let QUERYDATA = abiCoder.encode(["string","bytes"],[TYPE,args]);
@@ -54,9 +55,22 @@ describe("KEEPER - function tests", () => {
         h.advanceTime(43200); // 12 hour buffer
         await autopay.claimJobTips(JOBID, TIMESTAMP);
         expect(await token.balanceOf(accounts[1].address)).to.equal(bal.add(MAXGASCOVER.add(TIP).sub((MAXGASCOVER.add(TIP).mul(10)).div(1000))));// keeper gets gas + tip minus 1 percent fee
-        expect(await token.balanceOf(autopay.owner())).to.equal(ownerBal.add((MAXGASCOVER.add(TIP).mul(10)).div(1000)));// owner collects 1 percent fee
+        expect(await token.balanceOf(autopay.owner())).to.equal(ownerBal.add(fee));// owner collects 1 percent fee
         let paid = await h.expectThrowMessage(autopay.claimJobTips(JOBID,TIMESTAMP));
         assert.include(paid.message, "Already paid!");
+    });
+
+    it("continuousJobbyId", async () => {
+        let detail = await autopay.continuousJobbyId(JOBID);
+        expect(detail[0]).to.equal(FUNCTIONSIG);
+        expect(detail[1]).to.equal(h.zeroAddress);
+        expect(detail[2]).to.equal(80001);
+        expect(detail[3]).to.equal(TIMESTAMP);
+        expect(detail[4]).to.equal(MAXGASCOVER);
+        expect(detail[5]).to.equal(400);
+        expect(detail[6]).to.equal(600);
+        expect(detail[7]).to.equal(TIP);
+        expect(detail[8]).to.equal(MAXGASCOVER.add(TIP));
     });
 
     it("fundJob", async () => {
@@ -94,11 +108,11 @@ describe("KEEPER - function tests", () => {
         assert(BigInt(await token.balanceOf(accounts[1].address)) > acct1Bal);
     });
 
-    it("singleJobBalancebyId", async () => {
+    it("singleJobbyId", async () => {
         let args = abiCoder.encode(["bytes", "address", "uint256", "uint256", "uint256"],[FUNCTIONSIG,h.zeroAddress,80001,TIMESTAMP,MAXGASCOVER])
         let QUERYDATA = abiCoder.encode(["string","bytes"],[TYPE,args]);
         let QUERYID = keccak256(QUERYDATA);
-        let response = await autopay.singleJobBalancebyId(QUERYID);
+        let response = await autopay.singleJobbyId(QUERYID);
         expect(response.amount).to.equal(TIP);
         expect(response.timestamp).to.equal(blocky.timestamp);
         expect(response.timeToCallIt).to.equal(TIMESTAMP);
