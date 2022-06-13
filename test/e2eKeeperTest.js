@@ -9,7 +9,8 @@ require("chai").use(require("chai-as-promised")).should();
 
 describe("AutopayKeeper - e2e tests", function() {
 
-    let tellor, autopay, accounts, token, chainId, callTime, result, value, triggerTime, balanceBefore, balanceAfter, message, _window, interval;
+    let tellor, autopay, accounts, token, chainId, callTime, result, value, 
+    triggerTime, balanceBefore, balanceAfter, message, _window, interval, keeperAddress;
     let abiCoder = new ethers.utils.AbiCoder();
     let maxGasFee = BigNumber.from(web3.utils.toWei("2"));
     let tip = BigNumber.from(web3.utils.toWei("98"));
@@ -17,6 +18,8 @@ describe("AutopayKeeper - e2e tests", function() {
     let type = "TellorKpr";
     let types = ["bytes","address","uint256","uint256","uint256"];
     let valSubTypes= ["bytes32","address","uint256","uint256"];
+    let fakeTxHash = keccak256("0x");
+    let ParamsTypes = ["bytes", "address", "uint256", "uint256", "uint256"];
 
     beforeEach(async function() {
         accounts = await ethers.getSigners();
@@ -167,11 +170,9 @@ describe("AutopayKeeper - e2e tests", function() {
         // submitValue
         // val = tx hash, keeper address, timestamp call, gas paid;
         // Value to submit to oracle after job is done
-        let fakeTxHash = keccak256("0x");
-        let keeperAddress = accounts[10].address;
+        keeperAddress = accounts[10].address;
         let triggerTimestamp = await h.getBlock();
         let gasConsumed = maxGasFee; // if used max gas;
-        let ParamsTypes = ["bytes", "address", "uint256", "uint256", "uint256"];
         // value submission in bytes
         let valSubmission = abiCoder.encode(valSubTypes,[fakeTxHash,keeperAddress,triggerTimestamp.timestamp,gasConsumed]);
         let Args = [functionSig,h.zeroAddress,chainId,triggerTimestamp.timestamp,maxGasFee];
@@ -218,5 +219,67 @@ describe("AutopayKeeper - e2e tests", function() {
         let fee = ((tip.add(gasConsumed)).mul(await autopay.fee())).div(1000);
         expect(await token.balanceOf(accounts[10].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
         expect(await token.balanceOf(accounts[0].address)).to.equal((ownerBalB4.add(maxGasFee.sub(gasConsumed))).add(fee));
+    });
+
+    it("fund job multiple times", async () => {
+        let Args, QueryData, QueryDataArgs, gasConsumed;
+        keeperAddress = accounts[11].address;
+        await token.approve(autopay.address, h.toWei("1000"));
+        for(i=0; i < 10; i++){
+            await token.mint(accounts[i+1].address, h.toWei("100"));
+            await token.connect(accounts[i+1]).approve(autopay.address, h.toWei("100"));
+        }
+        let jobId;
+        let blocky = await h.getBlock();
+        let paramTypes = ["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"];
+        chainId = 80001;
+        _window = 40;
+        interval =  80;
+
+        let jobIdParams1 = [functionSig,h.zeroAddress,chainId,blocky.timestamp,maxGasFee,_window,interval,tip];
+        jobId = keccak256(abiCoder.encode(paramTypes,jobIdParams1));
+        await autopay.initKeeperJob(functionSig,h.zeroAddress,chainId,blocky.timestamp,maxGasFee,_window,interval,tip);
+        let detail = await autopay.continuousJobbyId(jobId);
+        expect(detail[0]).to.equal(functionSig);
+        expect(detail[1]).to.equal(h.zeroAddress);
+        expect(detail[2]).to.equal(chainId);
+        expect(detail[3]).to.equal(blocky.timestamp);
+        expect(detail[4]).to.equal(maxGasFee);
+        expect(detail[5]).to.equal(_window);
+        expect(detail[6]).to.equal(interval);
+        expect(detail[7]).to.equal(tip);
+        expect(detail[8]).to.equal(0);
+
+        for(i=0; i < 10; i++){
+            await autopay.connect(accounts[i+1]).fundJob(jobId,tip);
+            assert(await autopay.gasPaymentListCount() == i+1); //Job funders count
+        }
+        
+        triggerTimestamp = await h.getBlock();
+        for(i=0; i < 10; i++){
+            gasConsumed = h.toWei((i+1).toString());// different gas consumption, only first address will get gas remainder
+            valSubmission = abiCoder.encode(valSubTypes,[fakeTxHash,keeperAddress,(triggerTimestamp.timestamp)+(i+10),gasConsumed]);
+            Args = [functionSig,h.zeroAddress,chainId,(triggerTimestamp.timestamp)+(i+10),maxGasFee];
+            QueryDataArgs = abiCoder.encode(ParamsTypes,Args);
+            QueryData = abiCoder.encode(["string","bytes"],["TellorKpr",QueryDataArgs]);
+            queryId = keccak256(QueryData);
+            await tellor.submitValue(queryId,valSubmission,0,QueryData);
+        }
+        h.advanceTime(43300);
+        for(i=0; i < 10; i++){
+            if(BigInt(h.toWei((i+1).toString())) <= BigInt(maxGasFee)){
+                gasConsumed = BigInt(h.toWei((i+1).toString()));
+            }else{
+                gasConsumed = maxGasFee;
+            }
+            let fee = ((tip.add(gasConsumed)).mul(await autopay.fee())).div(1000);
+            keepBalB4 = await token.balanceOf(accounts[11].address);
+            let funderBalB4 = await token.balanceOf(accounts[i+1].address);
+            await autopay.claimJobTips(jobId,(triggerTimestamp.timestamp)+(i+10));
+            expect(await token.balanceOf(accounts[11].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
+            expect(await token.balanceOf(accounts[i+1].address)).to.equal(funderBalB4.add(maxGasFee.sub(gasConsumed)));
+        }
+
+
     });
 });

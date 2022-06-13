@@ -26,6 +26,7 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => KeeperJobDetails) jobs; // mapping jobId to queryId to JobDetails
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
     bytes32[] public queryIdsWithFunding; // array of queryIds that have funding
+    address[] public gasPayment; // array of addresses that funded a job tracked to pay them back remainder
 
     // Structs
     struct FeedDetails {
@@ -774,7 +775,7 @@ contract Autopay is UsingTellor {
             emit NewKeeperJob(msg.sender, _jobId, _queryData, _payReward);
 
     }
-    
+
     /**
     @dev Function for funding jobs that have already been setup
     @param _amount Amount of payment for calling the function excluding gas
@@ -784,11 +785,14 @@ contract Autopay is UsingTellor {
         bytes32 _jobId,
         uint256 _amount
     ) external {
+        // track tipper when they tip mapping(bytes32jobid => mapping(address => uint256))
+        // everytime a tipper tips then add address to array
         KeeperJobDetails storage _job = jobs[_jobId];
         require(_job.payReward > 0, "Job not initiated");
         uint256 _tipNGas = _amount + _job.maxGasRefund;
         require(_tipNGas > _job.payReward, "Not enough to cover payment");
         _job.balance += _tipNGas;
+        gasPayment.push(msg.sender);
         require(token.transferFrom(msg.sender, address(this), _tipNGas), "ERC20: transfer amount exceeds balance");
         emit KeeperJobFunded(msg.sender, _amount, _jobId);
     }
@@ -834,7 +838,7 @@ contract Autopay is UsingTellor {
             _paymentAmount += _j.payReward;
             _j.balance -= _gasRemainder;
             _j.balance -= _paymentAmount;
-            require(token.transfer(owner, _gasRemainder));
+            require(token.transfer(gasPayment[0], _gasRemainder));
         }else if (_j.balance > _j.payReward) {
             _paymentAmount += _j.payReward;
             _j.balance -= _paymentAmount;
@@ -847,6 +851,7 @@ contract Autopay is UsingTellor {
         // master.addStakingRewards((_paymentAmount * fee) / 1000);
         require(token.transfer(owner, (_paymentAmount * fee) / 1000));
         _j.paid[_callTime] = true;
+        _remove();
         emit JobPaid(_jobId, _queryId, _paymentAmount, _keeperAddress);
         
     }
@@ -863,6 +868,15 @@ contract Autopay is UsingTellor {
         bytes memory _queryData = abi.encode(_type,_encodedArgs);
         return keccak256(_queryData);
     }
+    /**
+    * @dev Helper function to delete first element in gasPayment array
+    */
+    function _remove() internal{
+        for(uint i=0; i< gasPayment.length - 1; i++){
+            gasPayment[i] = gasPayment[i+1];
+        }
+        gasPayment.pop();
+    }
     // Getter
     function singleJobbyId(bytes32 _queryId) external view returns (KeeperTip memory){
         return keeperTips[_queryId];
@@ -872,5 +886,9 @@ contract Autopay is UsingTellor {
     {
         KeeperJobDetails storage _j = jobs[_jobId];
         return (_j.functionSig,_j.contractAddress,_j.chainId,_j.triggerStart,_j.maxGasRefund,_j.window,_j.interval,_j.payReward,_j.balance);
+    }
+
+    function gasPaymentListCount() external view returns(uint){
+        return gasPayment.length;
     }
 }
