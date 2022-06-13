@@ -785,8 +785,6 @@ contract Autopay is UsingTellor {
         bytes32 _jobId,
         uint256 _amount
     ) external {
-        // track tipper when they tip mapping(bytes32jobid => mapping(address => uint256))
-        // everytime a tipper tips then add address to array
         KeeperJobDetails storage _job = jobs[_jobId];
         require(_job.payReward > 0, "Job not initiated");
         uint256 _tipNGas = _amount + _job.maxGasRefund;
