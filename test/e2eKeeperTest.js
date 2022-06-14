@@ -9,7 +9,7 @@ require("chai").use(require("chai-as-promised")).should();
 
 describe("AutopayKeeper - e2e tests", function() {
 
-    let tellor, autopay, accounts, token, chainId, callTime, result, value, 
+    let tellor, autopay, accounts, chainId, callTime, result, value, 
     triggerTime, balanceBefore, balanceAfter, message, _window, interval, keeperAddress;
     let abiCoder = new ethers.utils.AbiCoder();
     let maxGasFee = BigNumber.from(web3.utils.toWei("2"));
@@ -25,13 +25,9 @@ describe("AutopayKeeper - e2e tests", function() {
         accounts = await ethers.getSigners();
         const TellorPlayground = await ethers.getContractFactory("TellorPlayground");
         tellor = await TellorPlayground.deploy();
-        await tellor.deployed();
-        const Token = await ethers.getContractFactory("TestToken");
-        token = await Token.deploy();
-        await token.deployed();
-        await token.mint(accounts[0].address, h.toWei("10000000000"));
+        await tellor.faucet(accounts[0].address);
         const Autopay = await ethers.getContractFactory("Autopay");
-        autopay = await Autopay.deploy(tellor.address, token.address, accounts[0].address, 10);
+        autopay = await Autopay.deploy(tellor.address, tellor.address, accounts[0].address, 10);
         await autopay.deployed();
     });
 
@@ -39,7 +35,7 @@ describe("AutopayKeeper - e2e tests", function() {
         // tip qid 1
         callTime = await h.getBlock();
         chainId = 80001;
-        await token.approve(autopay.address, h.toWei("1000"));
+        await tellor.approve(autopay.address, h.toWei("1000"));
         let params1 = [functionSig,h.zeroAddress,chainId,callTime.timestamp,maxGasFee];
         let queryData1 = abiCoder.encode(["string","bytes"],[type,abiCoder.encode(types,params1)])
         let queryId1 = keccak256(queryData1);
@@ -89,9 +85,9 @@ describe("AutopayKeeper - e2e tests", function() {
         message = await h.expectThrowMessage(autopay.keeperClaimTip(queryId1));
         assert.include(message.message, "12 hour buffer not met");
         h.advanceTime(43200);
-        balanceBefore = await token.balanceOf(accounts[1].address);
+        balanceBefore = await tellor.balanceOf(accounts[1].address);
         await autopay.keeperClaimTip(queryId1);
-        balanceAfter = await token.balanceOf(accounts[1].address);
+        balanceAfter = await tellor.balanceOf(accounts[1].address);
         expect(balanceAfter).to.equal(balanceBefore.add(web3.utils.toWei("99"))); // tip(98) + maxgas(2) minus 1 percent
         message = await h.expectThrowMessage(autopay.keeperClaimTip(queryId1));
         assert.include(message.message, "No tips available")
@@ -100,13 +96,13 @@ describe("AutopayKeeper - e2e tests", function() {
 
         // id 2
         // check balances if gas paid not equal to maxgas cover.
-        balanceBefore = await token.balanceOf(accounts[2].address);
-        let ownerBal = await token.balanceOf(accounts[0].address);
+        let fee = tip.add(gasPaid).mul(await autopay.fee()).div(1000);
+        balanceBefore = await tellor.balanceOf(accounts[2].address);
+        let ownerBal = await tellor.balanceOf(tellor.address);
         await autopay.keeperClaimTip(queryId2);
-        expect(await token.balanceOf(accounts[0].address)).to.equal(ownerBal.add(web3.utils.toWei("1.99"))); // creator gets gas fee remainder, owner gets 1 percent.
-        balanceAfter = await token.balanceOf(accounts[2].address);
-        expect(balanceAfter).to.equal(balanceBefore.add(web3.utils.toWei("98")).add(web3.utils.toWei("1")).sub(web3.utils.toWei("0.99"))); // keeper gets tip plus gas minus 1 percent
-
+        expect(await tellor.balanceOf(tellor.address)).to.equal(ownerBal.add(fee)); // creator gets gas fee remainder, owner gets 1 percent.
+        balanceAfter = await tellor.balanceOf(accounts[2].address);
+        expect(balanceAfter).to.equal(balanceBefore.add(tip.add(gasPaid).sub(fee))); // keeper gets tip plus gas minus 1 percent
         //id 3
         message = await h.expectThrowMessage(autopay.keeperClaimTip(queryId3));
         assert.include(message.message, "Function called before its time!");
@@ -114,7 +110,7 @@ describe("AutopayKeeper - e2e tests", function() {
     });
 
     it("continuous job flow", async function() {
-        await token.approve(autopay.address, h.toWei("1000"));
+        await tellor.approve(autopay.address, h.toWei("1000"));
         let jobId;
         let blocky = await h.getBlock();
         let paramTypes = ["bytes","address","uint256","uint256","uint256","uint256","uint256","uint256"];
@@ -187,12 +183,12 @@ describe("AutopayKeeper - e2e tests", function() {
         message = await h.expectThrowMessage(autopay.claimJobTips(jobId, triggerTimestamp.timestamp));
         assert.include(message.message, "12 hour buffer not met");
         h.advanceTime(43200);
-        let keepBalB4 = await token.balanceOf(keeperAddress);
+        let keepBalB4 = await tellor.balanceOf(keeperAddress);
         let detailB4Claim = await autopay.continuousJobbyId(jobId);
         // use triggerTimestamp when claiming a tip
         // allows query id to match with query id of value submission on the oracle
         await autopay.claimJobTips(jobId, triggerTimestamp.timestamp);
-        expect(await token.balanceOf(keeperAddress)).to.equal(keepBalB4.add(gasConsumed.add(tip).sub(web3.utils.toWei("1"))));
+        expect(await tellor.balanceOf(keeperAddress)).to.equal(keepBalB4.add(gasConsumed.add(tip).sub(web3.utils.toWei("1"))));
         // trying to claim for same job
         message = await h.expectThrowMessage(autopay.claimJobTips(jobId, triggerTimestamp.timestamp));
         assert.include(message.message, "Already paid!");
@@ -201,8 +197,8 @@ describe("AutopayKeeper - e2e tests", function() {
         expect(detail[8]).to.equal(detailB4Claim[8].sub(tip.add(maxGasFee)));
         // claim remaining balance with submission that consumed less gas
         // gas remainder goes to owner.
-        let ownerBalB4 = await token.balanceOf(accounts[0].address);
-        keepBalB4 = await token.balanceOf(accounts[10].address);
+        let ownerBalB4 = await tellor.balanceOf(accounts[0].address);
+        keepBalB4 = await tellor.balanceOf(accounts[10].address);
         triggerTimestamp = await h.getBlock();
         gasConsumed = gasConsumed.sub(web3.utils.toWei("1"));
         valSubmission = abiCoder.encode(valSubTypes,[fakeTxHash,keeperAddress,triggerTimestamp.timestamp,gasConsumed]);
@@ -217,17 +213,17 @@ describe("AutopayKeeper - e2e tests", function() {
         detail = await autopay.continuousJobbyId(jobId);
         expect(detail[8]).to.equal(0);
         let fee = ((tip.add(gasConsumed)).mul(await autopay.fee())).div(1000);
-        expect(await token.balanceOf(accounts[10].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
-        expect(await token.balanceOf(accounts[0].address)).to.equal((ownerBalB4.add(maxGasFee.sub(gasConsumed))).add(fee));
+        expect(await tellor.balanceOf(accounts[10].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
+        expect(await tellor.balanceOf(accounts[0].address)).to.equal((ownerBalB4.add(maxGasFee.sub(gasConsumed))).add(fee));
     });
 
     it("fund job multiple times", async () => {
         let Args, QueryData, QueryDataArgs, gasConsumed;
         keeperAddress = accounts[11].address;
-        await token.approve(autopay.address, h.toWei("1000"));
+        await tellor.approve(autopay.address, h.toWei("1000"));
         for(i=0; i < 10; i++){
-            await token.mint(accounts[i+1].address, h.toWei("100"));
-            await token.connect(accounts[i+1]).approve(autopay.address, h.toWei("100"));
+            await tellor.faucet(accounts[i+1].address);
+            await tellor.connect(accounts[i+1]).approve(autopay.address, h.toWei("100"));
         }
         let jobId;
         let blocky = await h.getBlock();
@@ -273,11 +269,11 @@ describe("AutopayKeeper - e2e tests", function() {
                 gasConsumed = maxGasFee;
             }
             let fee = ((tip.add(gasConsumed)).mul(await autopay.fee())).div(1000);
-            keepBalB4 = await token.balanceOf(accounts[11].address);
-            let funderBalB4 = await token.balanceOf(accounts[i+1].address);
+            keepBalB4 = await tellor.balanceOf(accounts[11].address);
+            let funderBalB4 = await tellor.balanceOf(accounts[i+1].address);
             await autopay.claimJobTips(jobId,(triggerTimestamp.timestamp)+(i+10));
-            expect(await token.balanceOf(accounts[11].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
-            expect(await token.balanceOf(accounts[i+1].address)).to.equal(funderBalB4.add(maxGasFee.sub(gasConsumed)));
+            expect(await tellor.balanceOf(accounts[11].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
+            expect(await tellor.balanceOf(accounts[i+1].address)).to.equal(funderBalB4.add(maxGasFee.sub(gasConsumed)));
         }
 
 

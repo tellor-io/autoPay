@@ -187,9 +187,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        // token.approve(address(master), (_cumulativeReward * fee) / 1000);
-        // master.addStakingRewards((_cumulativeReward * fee) / 1000);
-        require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
+        token.approve(address(master), (_cumulativeReward * fee) / 1000);
+        master.addStakingRewards((_cumulativeReward * fee) / 1000);
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -234,9 +233,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        // token.approve(address(master), (_cumulativeReward * fee) / 1000);
-        // master.addStakingRewards((_cumulativeReward * fee) / 1000);
-        require(token.transfer(owner, (_cumulativeReward * fee) / 1000));
+        token.approve(address(master), (_cumulativeReward * fee) / 1000);
+        master.addStakingRewards((_cumulativeReward * fee) / 1000);
         emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
     }
 
@@ -717,9 +715,8 @@ contract Autopay is UsingTellor {
         }
 
         require(token.transfer(_keeperAddress, _keeperTips.amount - ((_keeperTips.amount * fee) / 1000)));
-        // token.approve(address(master),(_keeperTips.amount * fee) / 1000);
-        // master.addStakingRewards((_keeperTips.amount * fee) / 1000);
-        require(token.transfer(owner, (_keeperTips.amount * fee) / 1000));
+        token.approve(address(master),(_keeperTips.amount * fee) / 1000);
+        master.addStakingRewards((_keeperTips.amount * fee) / 1000);
         _keeperTips.amount = 0;
         emit KeeperTipClaimed(_queryId, _keeperTips.amount, _keeperAddress);
     }
