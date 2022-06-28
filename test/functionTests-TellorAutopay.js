@@ -477,5 +477,16 @@ describe("Autopay - function tests", () => {
     assert(await autopay.queryIdsWithFundingIndex(h.uintTob32(2)) == 0)
     assert(await autopay.queryIdsWithFundingIndex(h.uintTob32(3)) == 0)
     assert(await autopay.queryIdsWithFundingIndex(h.uintTob32(4)) == 1)
+  });
+  it("getTipsByAddress", async () => {
+    let userAccount = accounts[5]
+    await tellor.faucet(userAccount.address)
+    await tellor.connect(userAccount).approve(autopay.address,h.toWei("1000"))
+    await autopay.connect(userAccount).tip(h.uintTob32(2),web3.utils.toWei("10"),'0x')
+    assert(await autopay.getTipsByAddress(userAccount.address) == web3.utils.toWei("10"))
+    await autopay.connect(userAccount).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,"0x")
+    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0]))
+    await autopay.connect(userAccount).fundFeed(bytesId, QUERYID1, h.toWei("99"))
+    assert(await autopay.getTipsByAddress(userAccount.address) == web3.utils.toWei("109"))
   })
 });

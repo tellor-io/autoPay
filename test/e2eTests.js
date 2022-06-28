@@ -573,4 +573,26 @@ it("multiple queryID's, several disputes and refills", async function() {
     await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlockyBad.timestamp])) // threshold not met, not first within window
   });
 
+  it("test incrementing of user tips total with multiple tipping/funding", async () => {
+    for(i=1; i<6; i++) {
+      await tellor.faucet(accounts[i].address)
+      await tellor.connect(accounts[i]).approve(autopay.address,h.toWei("1000"))
+      assert(await autopay.getTipsByAddress(accounts[i].address) == 0)
+    }
+
+    for(i=1; i<6; i++) {
+      await autopay.connect(accounts[i]).tip(h.uintTob32(i),h.toWei(i.toString()),'0x')
+      assert(await autopay.getTipsByAddress(accounts[i].address) == h.toWei(i.toString()))
+    }
+
+    blocky = await h.getBlock()
+    await tellor.approve(autopay.address,h.toWei("1000"))
+    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,"0x")
+    bytesId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0]))
+
+    for(i=1; i<6; i++) {
+      await autopay.connect(accounts[i]).fundFeed(bytesId, QUERYID1, h.toWei(i.toString()))
+      assert(await autopay.getTipsByAddress(accounts[i].address) == h.toWei((i*2).toString()))
+    }
+  })
 });
