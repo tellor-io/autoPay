@@ -22,6 +22,7 @@ contract Autopay is UsingTellor {
     mapping(bytes32 => Tip[]) public tips; // mapping queryId to tips
     mapping(bytes32 => bytes32) public queryIdFromDataFeedId; // mapping dataFeedId to queryId
     mapping(bytes32 => uint256) public queryIdsWithFundingIndex; // mapping queryId to queryIdsWithFunding index plus one (0 if not in array)
+    mapping(address => uint256) public userTipsTotal;  // track user tip total per user
     mapping(bytes32 => KeeperTip) public keeperTips; // mapping queryId to keeperTip
     mapping(bytes32 => KeeperJobDetails) jobs; // mapping jobId to queryId to JobDetails
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
@@ -261,6 +262,7 @@ contract Autopay is UsingTellor {
             feedsWithFunding.push(_feedId);
             _feed.feedsWithFundingIndex = feedsWithFunding.length;
         }
+        userTipsTotal[msg.sender] += _amount;
         emit DataFeedFunded(_feedId, _queryId, _amount, msg.sender);
     }
 
@@ -353,6 +355,7 @@ contract Autopay is UsingTellor {
             token.transferFrom(msg.sender, address(this), _amount),
             "ERC20: transfer amount exceeds balance"
         );
+        userTipsTotal[msg.sender] += _amount;
         emit TipAdded(_queryId, _amount, _queryData, msg.sender);
     }
 
@@ -474,6 +477,14 @@ contract Autopay is UsingTellor {
         uint256 _timestamp
     ) external view returns (bool) {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
+    }
+
+    function getTipsByAddress(address _user)
+        external
+        view
+        returns (uint256)
+    {
+        return userTipsTotal[_user];
     }
 
     // Internal functions
