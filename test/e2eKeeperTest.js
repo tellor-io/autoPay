@@ -26,7 +26,7 @@ describe("AutopayKeeper - e2e tests", function() {
         const TellorPlayground = await ethers.getContractFactory("TellorPlayground");
         tellor = await TellorPlayground.deploy();
         await tellor.faucet(accounts[0].address);
-        const Autopay = await ethers.getContractFactory("Autopay");
+        const Autopay = await ethers.getContractFactory("Keeper");
         autopay = await Autopay.deploy(tellor.address, tellor.address, accounts[0].address, 10);
         await autopay.deployed();
     });
