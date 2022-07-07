@@ -22,6 +22,7 @@ contract Keeper is UsingTellor {
 
     mapping(bytes32 => KeeperTip) public keeperTips; // mapping queryId to keeperTip
     mapping(bytes32 => KeeperJobDetails) jobs; // mapping jobId to queryId to JobDetails
+    mapping(address => uint256) public userTipsTotal; // track user tip total per user
 
     address[] public gasPayment; // array of addresses that funded a job tracked to pay them back remainder
 
@@ -176,6 +177,7 @@ contract Keeper is UsingTellor {
         require(_tipNGas > _job.payReward, "Not enough to cover payment");
         _job.balance += _tipNGas;
         gasPayment.push(msg.sender);
+        userTipsTotal[msg.sender] += _amount;
         require(
             token.transferFrom(msg.sender, address(this), _tipNGas),
             "ERC20: transfer amount exceeds balance"
@@ -355,7 +357,7 @@ contract Keeper is UsingTellor {
         } else {
             _k.amount += _tip;
         }
-
+        userTipsTotal[msg.sender] += _tip;
         require(
             token.transferFrom(msg.sender, address(this), _tip),
             "ERC20: transfer amount exceeds balance"
@@ -377,14 +379,6 @@ contract Keeper is UsingTellor {
     }
 
     // Getters
-    function singleJobById(bytes32 _queryId)
-        external
-        view
-        returns (KeeperTip memory)
-    {
-        return keeperTips[_queryId];
-    }
-
     function continuousJobById(bytes32 _jobId)
         external
         view
@@ -416,6 +410,18 @@ contract Keeper is UsingTellor {
 
     function gasPaymentListCount() external view returns (uint256) {
         return gasPayment.length;
+    }
+
+    function getTipsByAddress(address _user) external view returns (uint256) {
+        return userTipsTotal[_user];
+    }
+
+    function singleJobById(bytes32 _queryId)
+        external
+        view
+        returns (KeeperTip memory)
+    {
+        return keeperTips[_queryId];
     }
 
     // Internal functions
