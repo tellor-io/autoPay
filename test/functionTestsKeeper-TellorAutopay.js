@@ -25,7 +25,7 @@ describe("KEEPER - function tests", () => {
         tellor = await TellorPlayground.deploy();
         await tellor.deployed();
         await tellor.faucet(accounts[0].address);
-        const Autopay = await ethers.getContractFactory("Autopay");
+        const Autopay = await ethers.getContractFactory("Keeper");
         autopay = await Autopay.deploy(tellor.address, tellor.address, accounts[0].address, 10);
         await autopay.deployed();
         await tellor.approve(autopay.address, h.toWei("1000"));

@@ -8,14 +8,20 @@ pragma solidity 0.8.3;
  * specific time intervals. Any non-rebasing ERC20 token can be used for payment.
  * Only the first data submission within each time window gets a reward.
 */
+
+interface IFlex {
+    function addStakingRewards(uint256 _amount) external;
+}
+
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
-import "./Keeper.sol";
+// import "./Keeper.sol";
+
 contract Autopay is UsingTellor {
     // Storage
     ITellor public master; // Tellor contract address
     IERC20 public token; // TRB token address
-    Keeper public keeper; // Keeper contract address
+    // Keeper public keeper; // Keeper contract address
     address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
@@ -28,7 +34,7 @@ contract Autopay is UsingTellor {
 
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
     bytes32[] public queryIdsWithFunding; // array of queryIds that have funding
-    address[] public gasPayment; // array of addresses that funded a job tracked to pay them back remainder
+    // address[] public gasPayment; // array of addresses that funded a job tracked to pay them back remainder
 
     // Structs
     struct FeedDetails {
@@ -51,26 +57,26 @@ contract Autopay is UsingTellor {
         uint256 timestamp;
     }
 
-    struct KeeperTip {
-        uint256 amount;
-        uint256 timestamp; // current timestamp
-        uint256 timeToCallIt; // Timestamp for when to call the function after
-        uint256 maxGasRefund; // Max gas price keeper is recommended to pay in payment token
-        address creator;
-    }
+    // struct KeeperTip {
+    //     uint256 amount;
+    //     uint256 timestamp; // current timestamp
+    //     uint256 timeToCallIt; // Timestamp for when to call the function after
+    //     uint256 maxGasRefund; // Max gas price keeper is recommended to pay in payment token
+    //     address creator;
+    // }
 
-    struct KeeperJobDetails {
-        address contractAddress;
-        bytes functionSig;
-        uint256 triggerStart;
-        uint256 chainId;
-        uint256 maxGasRefund;
-        uint256 interval;
-        uint256 window;
-        uint256 payReward;
-        uint256 balance;
-        mapping(uint256 => bool) paid;
-    }
+    // struct KeeperJobDetails {
+    //     address contractAddress;
+    //     bytes functionSig;
+    //     uint256 triggerStart;
+    //     uint256 chainId;
+    //     uint256 maxGasRefund;
+    //     uint256 interval;
+    //     uint256 window;
+    //     uint256 payReward;
+    //     uint256 balance;
+    //     mapping(uint256 => bool) paid;
+    // }
 
     // Events
     event NewDataFeed(
@@ -158,12 +164,12 @@ contract Autopay is UsingTellor {
         address payable _tellor,
         address _token,
         address _owner,
-        address _keeper,
+        // address _keeper,
         uint256 _fee
     ) UsingTellor(_tellor) {
         master = ITellor(_tellor);
         token = IERC20(_token);
-        keeper = Keeper(_keeper);
+        // keeper = Keeper(_keeper);
         owner = _owner;
         fee = _fee;
     }
@@ -193,7 +199,7 @@ contract Autopay is UsingTellor {
             )
         );
         token.approve(address(master), (_cumulativeReward * fee) / 1000);
-        master.addStakingRewards((_cumulativeReward * fee) / 1000);
+        IFlex(address(master)).addStakingRewards((_cumulativeReward * fee) / 1000);
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -239,7 +245,7 @@ contract Autopay is UsingTellor {
             )
         );
         token.approve(address(master), (_cumulativeReward * fee) / 1000);
-        master.addStakingRewards((_cumulativeReward * fee) / 1000);
+        IFlex(address(master)).addStakingRewards((_cumulativeReward * fee) / 1000);
         emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
     }
 
@@ -643,19 +649,19 @@ contract Autopay is UsingTellor {
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
     }
-    // Getter
-    function singleJobbyId(bytes32 _queryId) external view returns (KeeperTip memory){
-        return keeper.getKeeperTipbyQueryId();
-    }
+    // // Getter
+    // function singleJobbyId(bytes32 _queryId) external view returns (KeeperTip memory){
+    //     return keeper.getKeeperTipbyQueryId();
+    // }
 
-    function continuousJobbyId(bytes32 _jobId) external view returns (bytes memory,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)
-    {
-        KeeperJobDetails storage _j = keeper.jobs[_jobId];
-        return (_j.functionSig,_j.contractAddress,_j.chainId,_j.triggerStart,_j.maxGasRefund,_j.window,_j.interval,_j.payReward,_j.balance);
-    }
+    // function continuousJobbyId(bytes32 _jobId) external view returns (bytes memory,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)
+    // {
+    //     KeeperJobDetails storage _j = keeper.jobs[_jobId];
+    //     return (_j.functionSig,_j.contractAddress,_j.chainId,_j.triggerStart,_j.maxGasRefund,_j.window,_j.interval,_j.payReward,_j.balance);
+    // }
 
-    function gasPaymentListCount() external view returns(uint){
-        return keeper.gasPayment.length;
-    }
+    // function gasPaymentListCount() external view returns(uint){
+    //     return keeper.gasPayment.length;
+    // }
 
 }

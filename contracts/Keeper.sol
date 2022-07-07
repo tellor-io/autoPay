@@ -9,14 +9,19 @@ pragma solidity 0.8.3;
  * Only the first data submission within each time window gets a reward.
 */
 
+interface IFlex {
+    function addStakingRewards(uint256 _amount) external;
+}
+
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
-import "./Autopay.sol";
+// import "./Autopay.sol";
+
 contract Keeper is UsingTellor {
     // Storage
     ITellor public master; // Tellor contract address
     IERC20 public token; // TRB token address
-    Autopay public autopay; //Autopay contract address
+    // Autopay public autopay; //Autopay contract address
     address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
@@ -76,36 +81,41 @@ contract Keeper is UsingTellor {
         uint256 _payment,
         address _keeper
     );
+    event JobRemoved(
+        bytes32 _queryId,
+        address _creator
+    );
     event MaxGasCoverIncreased(
         uint256 _amount,
         bytes32 _queryId,
         address _creator
     );
+    
 
     // Functions
 
         constructor(
         address payable _tellor,
         address _token,
-        address _autopay,
+        // address _autopay,
         address _owner,
         uint256 _fee
     ) UsingTellor(_tellor) {
         master = ITellor(_tellor);
         token = IERC20(_token);
-        autopay = Autopay(_autopay);
+        // autopay = Autopay(_autopay);
         owner = _owner;
         fee = _fee;
     }
 
     /**
-    * @dev Function to tip keepers to call a function
-    * @param _functionSig The function signature data
-    * @param _contractAddress The smart contract address where the function is to be called
-    * @param _triggerTime The timestamp of when to trigger the function
-    * @param _chainId The chain id
-    * @param _maxGasRefund The amount of gas covered by creator in payment token
-    * @param _tip Amount to tip
+     * @dev Function to tip keepers to call a function
+     * @param _functionSig The function signature data
+     * @param _contractAddress The smart contract address where the function is to be called
+     * @param _triggerTime The timestamp of when to trigger the function
+     * @param _chainId The chain id
+     * @param _maxGasRefund The amount of gas covered by creator in payment token
+     * @param _tip Amount to tip
     */
     function tipKeeperJob(bytes calldata _functionSig,address _contractAddress,uint256 _chainId,uint256 _triggerTime,uint256 _maxGasRefund,uint256 _tip)
         external {
@@ -138,20 +148,21 @@ contract Keeper is UsingTellor {
         emit MaxGasCoverIncreased(_amount, _queryId, msg.sender);
         }
 
-    // function unclaimedSingleTipsFallback(bytes32 _queryId) external {
-    //     KeeperTip storage _keep = keeperTips[_queryId];
-    //     require((block.timestamp - _keep.timeToCallIt) >  12 weeks, "Wait 12 weeks to get unclaimed tips");
-    //     require(msg.sender == _keep.creator, "Not your job");
-    //     require(_keep.amount > 0, "There are no tips to claim");
-    //     require(
-    //         token.transfer(msg.sender, _keep.amount + _keep.maxGasCover)
-    //         );
-    //     _keep.amount = 0;
-    //     emit JobRemoved(_queryId, msg.sender);
-    // }
+    function unclaimedSingleTipsFallback(bytes32 _queryId) external {
+        KeeperTip storage _keep = keeperTips[_queryId];
+        require((block.timestamp - _keep.timeToCallIt) >  12 weeks, "Wait 12 weeks to get unclaimed tips");
+        require(msg.sender == _keep.creator, "Not your job");
+        require(_keep.amount > 0, "There are no tips to claim");
+        require(
+            token.transfer(msg.sender, _keep.amount + _keep.maxGasRefund)
+            );
+        _keep.amount = 0;
+        emit JobRemoved(_queryId, msg.sender);
+    }
+
     /**
-    * @dev Function for claiming a single function call tip
-    * @param _queryId ID of query to claim tip for
+     * @dev Function for claiming a single function call tip
+     * @param _queryId ID of query to claim tip for
     */
     function keeperClaimTip(bytes32 _queryId) external {
         uint256 _timestamp = getTimestampbyQueryIdandIndex(_queryId, 0);
@@ -183,7 +194,7 @@ contract Keeper is UsingTellor {
 
         require(token.transfer(_keeperAddress, _keeperTips.amount - ((_keeperTips.amount * fee) / 1000)));
         token.approve(address(master),(_keeperTips.amount * fee) / 1000);
-        master.addStakingRewards((_keeperTips.amount * fee) / 1000);
+        IFlex(address(master)).addStakingRewards((_keeperTips.amount * fee) / 1000);
         _keeperTips.amount = 0;
         emit KeeperTipClaimed(_queryId, _keeperTips.amount, _keeperAddress);
     }
@@ -343,10 +354,22 @@ contract Keeper is UsingTellor {
     /**
     * @dev Helper function to get mapping keys
     */
-
-    function getKeeperTipbyQueryId() external view returns (bytes32) {
+    function getKeeperTipByQueryId(bytes32 _queryId) external view returns (KeeperTip memory) {
         return keeperTips[_queryId];
         }
 
+    // Getter
+    // function singleJobbyId(bytes32 _queryId) external view returns (KeeperTip memory){
+    //     return keeper.getKeeperTipbyQueryId();
+    // }
 
+    function continuousJobById(bytes32 _jobId) external view returns (bytes memory,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)
+    {
+        KeeperJobDetails storage _j = jobs[_jobId];
+        return (_j.functionSig,_j.contractAddress,_j.chainId,_j.triggerStart,_j.maxGasRefund,_j.window,_j.interval,_j.payReward,_j.balance);
+    }
+
+    function gasPaymentListCount() external view returns(uint){
+        return gasPayment.length;
+    }
 }
