@@ -63,10 +63,10 @@ describe("KEEPER - function tests", () => {
         assert.include(paid.message, "Already paid!");
     });
 
-    it("continuousJobbyId", async () => {
+    it("continuousJobById", async () => {
         await autopay.initKeeperJob(functionSig,h.zeroAddress,80001,blocky.timestamp,maxGasCover,400,600,tip);
         await autopay.fundJob(jobId,tip);
-        let detail = await autopay.continuousJobbyId(jobId);
+        let detail = await autopay.continuousJobById(jobId);
         expect(detail[0]).to.equal(functionSig);
         expect(detail[1]).to.equal(h.zeroAddress);
         expect(detail[2]).to.equal(80001);
@@ -126,12 +126,12 @@ describe("KEEPER - function tests", () => {
         assert(BigInt(await tellor.balanceOf(accounts[1].address)) > acct1Bal);
     });
 
-    it("singleJobbyId", async () => {
+    it("singleJobById", async () => {
         callTime = await h.getBlock();
         let args = abiCoder.encode(queryIdParamTypes,[functionSig,h.zeroAddress,80001,callTime.timestamp,maxGasCover])
         queryData = abiCoder.encode(["string","bytes"],[TYPE,args]);
         await autopay.tipKeeperJob(functionSig,h.zeroAddress,80001,callTime.timestamp,maxGasCover,tip);
-        let response = await autopay.singleJobbyId(keccak256(queryData));
+        let response = await autopay.singleJobById(keccak256(queryData));
         expect(response.amount).to.equal(tip);
         expect(response.timestamp).to.equal((await h.getBlock()).timestamp);
         expect(response.timeToCallIt).to.equal(callTime.timestamp);

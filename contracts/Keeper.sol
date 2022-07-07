@@ -147,7 +147,7 @@ contract Keeper is UsingTellor {
             );
         emit MaxGasCoverIncreased(_amount, _queryId, msg.sender);
         }
-
+    
     function unclaimedSingleTipsFallback(bytes32 _queryId) external {
         KeeperTip storage _keep = keeperTips[_queryId];
         require((block.timestamp - _keep.timeToCallIt) >  12 weeks, "Wait 12 weeks to get unclaimed tips");
@@ -199,17 +199,18 @@ contract Keeper is UsingTellor {
         emit KeeperTipClaimed(_queryId, _keeperTips.amount, _keeperAddress);
     }
     // function getJobBalance() external view returns { return _job.balance}
+    
     /**
-    * @dev Function for setting up a function call job
-    * @param _contractAddress Address of smart contract
-    * @param _functionSig Function signature data
-    * @param _maxGasRefund Maximum amount of gas a keeper is able to claim
-    * @param _triggerStart Timestamp of when the function needs to be called
-    * @param _chainId Chain ID for the chain where the contract exists
-    * @param _window Time in seconds of the size of window for when the function needs to be triggered
-    * @param _interval Time in seconds of how often the function needs to be triggered
-    * @param _payReward Payment amount for each function call
-    */
+     * @dev Function for setting up a function call job
+     * @param _contractAddress Address of smart contract
+     * @param _functionSig Function signature data
+     * @param _maxGasRefund Maximum amount of gas a keeper is able to claim
+     * @param _triggerStart Timestamp of when the function needs to be called
+     * @param _chainId Chain ID for the chain where the contract exists
+     * @param _window Time in seconds of the size of window for when the function needs to be triggered
+     * @param _interval Time in seconds of how often the function needs to be triggered
+     * @param _payReward Payment amount for each function call
+     */
     function initKeeperJob(
         bytes calldata _functionSig,
         address _contractAddress,
@@ -252,9 +253,9 @@ contract Keeper is UsingTellor {
     }
 
     /**
-    @dev Function for funding jobs that have already been setup
-    @param _amount Amount of payment for calling the function excluding gas
-    @param _jobId ID of queryId and function(job) details
+     * @dev Function for funding jobs that have already been setup
+     * @param _amount Amount of payment for calling the function excluding gas
+     * @param _jobId ID of queryId and function(job) details
     */
     function fundJob(
         bytes32 _jobId,
@@ -271,11 +272,11 @@ contract Keeper is UsingTellor {
     }
 
     /**
-    * @notice Reporter queryId submission to oracle uses the triggerTimestamp not startTime(_triggerStart)
-    * @dev Function for claiming tips for jobs, can be called by anyone
-    * @param _jobId Hash of the queryId and the job details
-    * @param _callTime Timestamp of when keeper triggered function
-    */
+     * @notice Reporter queryId submission to oracle uses the triggerTimestamp not startTime(_triggerStart)
+     * @dev Function for claiming tips for jobs, can be called by anyone
+     * @param _jobId Hash of the queryId and the job details
+     * @param _callTime Timestamp of when keeper triggered function
+     */
     function claimJobTips(
         bytes32 _jobId,
         uint256 _callTime
@@ -330,10 +331,10 @@ contract Keeper is UsingTellor {
     }
 
     /**
-    * @dev Helper function to generate unique queryId for job
-    * @param _j JobID to generate queryId for
-    * @param _t Unique timestamp used to generate queryId
-    */
+     * @dev Helper function to generate unique queryId for job
+     * @param _j JobID to generate queryId for
+     * @param _t Unique timestamp used to generate queryId
+     */
     function _generateQueryId(bytes32 _j, uint256 _t) internal view returns (bytes32) {
         KeeperJobDetails storage _job = jobs[_j];
         string memory _type = "TellorKpr";
@@ -342,7 +343,7 @@ contract Keeper is UsingTellor {
         return keccak256(_queryData);
     }
     /**
-    * @dev Helper function to delete first element in gasPayment array
+     * @dev Helper function to delete first element in gasPayment array
     */
     function _remove() internal{
         for(uint i=0; i<gasPayment.length - 1; i++){
@@ -351,17 +352,10 @@ contract Keeper is UsingTellor {
         gasPayment.pop();
     }
 
-    /**
-    * @dev Helper function to get mapping keys
-    */
-    function getKeeperTipByQueryId(bytes32 _queryId) external view returns (KeeperTip memory) {
-        return keeperTips[_queryId];
-        }
-
     // Getter
-    // function singleJobbyId(bytes32 _queryId) external view returns (KeeperTip memory){
-    //     return keeper.getKeeperTipbyQueryId();
-    // }
+    function singleJobById(bytes32 _queryId) external view returns (KeeperTip memory){
+        return keeperTips[_queryId];
+    }
 
     function continuousJobById(bytes32 _jobId) external view returns (bytes memory,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256)
     {
