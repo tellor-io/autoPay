@@ -26,7 +26,7 @@ describe("AutopayKeeper - e2e tests", function() {
         const TellorPlayground = await ethers.getContractFactory("TellorPlayground");
         tellor = await TellorPlayground.deploy();
         await tellor.faucet(accounts[0].address);
-        const Autopay = await ethers.getContractFactory("Autopay");
+        const Autopay = await ethers.getContractFactory("Keeper");
         autopay = await Autopay.deploy(tellor.address, tellor.address, accounts[0].address, 10);
         await autopay.deployed();
     });
@@ -52,16 +52,16 @@ describe("AutopayKeeper - e2e tests", function() {
         let queryData3 = abiCoder.encode(["string","bytes"],[type,abiCoder.encode(types,params3)])
         let queryId3 = keccak256(queryData3);
         await autopay.tipKeeperJob(functionSig,h.zeroAddress,chainId,callTime.timestamp,maxGasFee,tip);
-        result = await autopay.singleJobbyId(queryId3);
+        result = await autopay.singleJobById(queryId3);
         expect(result.amount).to.equal(BigNumber.from(tip));
         // tipping qid 1 again
         await autopay.tipKeeperJob(functionSig,h.zeroAddress,chainId,callTime.timestamp,maxGasFee,tip);
-        result = await autopay.singleJobbyId(queryId3);
+        result = await autopay.singleJobById(queryId3);
         expect(result.amount).to.equal(BigNumber.from(tip).mul(2));
         expect(result.maxGasRefund).to.equal(BigNumber.from(maxGasFee));
         // tipping qid 1 third time, should increase stored tip by 3
         await autopay.tipKeeperJob(functionSig,h.zeroAddress,chainId,callTime.timestamp,maxGasFee,tip);
-        result = await autopay.singleJobbyId(queryId3);
+        result = await autopay.singleJobById(queryId3);
         expect(result[0]).to.equal(BigNumber.from(tip).mul(3));
         // submitValue for each qid
         // qid 1
@@ -91,7 +91,7 @@ describe("AutopayKeeper - e2e tests", function() {
         expect(balanceAfter).to.equal(balanceBefore.add(web3.utils.toWei("99"))); // tip(98) + maxgas(2) minus 1 percent
         message = await h.expectThrowMessage(autopay.keeperClaimTip(queryId1));
         assert.include(message.message, "No tips available")
-        result = await autopay.singleJobbyId(queryId1);
+        result = await autopay.singleJobById(queryId1);
         assert(result.amount == 0);
 
         // id 2
@@ -121,7 +121,7 @@ describe("AutopayKeeper - e2e tests", function() {
         let jobIdParams1 = [functionSig,h.zeroAddress,chainId,blocky.timestamp,maxGasFee,_window,interval,tip];
         jobId = keccak256(abiCoder.encode(paramTypes,jobIdParams1));
         await autopay.initKeeperJob(functionSig,h.zeroAddress,chainId,blocky.timestamp,maxGasFee,_window,interval,tip);
-        let detail = await autopay.continuousJobbyId(jobId);
+        let detail = await autopay.continuousJobById(jobId);
         expect(detail[0]).to.equal(functionSig);
         expect(detail[1]).to.equal(h.zeroAddress);
         expect(detail[2]).to.equal(chainId);
@@ -148,7 +148,7 @@ describe("AutopayKeeper - e2e tests", function() {
         // fund a job once
         await autopay.fundJob(jobId,tip);
         // check balance incrementing
-        let bal1 = await autopay.continuousJobbyId(jobId);
+        let bal1 = await autopay.continuousJobById(jobId);
         expect((bal1)[8]).to.equal(maxGasFee.add(tip));
         // fund job that hasn't been setup
         // different chain id to change query Id
@@ -159,7 +159,7 @@ describe("AutopayKeeper - e2e tests", function() {
         // add tip to an existing job 
         // check balance incrementing
         await autopay.fundJob(jobId,tip);
-        detail = await autopay.continuousJobbyId(jobId);
+        detail = await autopay.continuousJobById(jobId);
         expect(detail[8]).to.equal(BigNumber.from(bal1[8]).add(tip.add(maxGasFee)));
         // funded job twice so balance should be equal to tip times 2
         expect(detail[8]).to.equal((maxGasFee.add(tip)).mul(2));
@@ -184,7 +184,7 @@ describe("AutopayKeeper - e2e tests", function() {
         assert.include(message.message, "12 hour buffer not met");
         h.advanceTime(43200);
         let keepBalB4 = await tellor.balanceOf(keeperAddress);
-        let detailB4Claim = await autopay.continuousJobbyId(jobId);
+        let detailB4Claim = await autopay.continuousJobById(jobId);
         // use triggerTimestamp when claiming a tip
         // allows query id to match with query id of value submission on the oracle
         await autopay.claimJobTips(jobId, triggerTimestamp.timestamp);
@@ -193,7 +193,7 @@ describe("AutopayKeeper - e2e tests", function() {
         message = await h.expectThrowMessage(autopay.claimJobTips(jobId, triggerTimestamp.timestamp));
         assert.include(message.message, "Already paid!");
         // check remaining job balance decrmenting
-        detail = await autopay.continuousJobbyId(jobId);
+        detail = await autopay.continuousJobById(jobId);
         expect(detail[8]).to.equal(detailB4Claim[8].sub(tip.add(maxGasFee)));
         // claim remaining balance with submission that consumed less gas
         // gas remainder goes to owner.
@@ -210,7 +210,7 @@ describe("AutopayKeeper - e2e tests", function() {
         await tellor.connect(accounts[4]).submitValue(queryId,valSubmission,0,QueryData);
         h.advanceTime(43300);
         await autopay.claimJobTips(jobId, triggerTimestamp.timestamp);
-        detail = await autopay.continuousJobbyId(jobId);
+        detail = await autopay.continuousJobById(jobId);
         expect(detail[8]).to.equal(0);
         let fee = ((tip.add(gasConsumed)).mul(await autopay.fee())).div(1000);
         expect(await tellor.balanceOf(accounts[10].address)).to.equal(keepBalB4.add((tip.add(gasConsumed)).sub(fee)));
@@ -235,7 +235,7 @@ describe("AutopayKeeper - e2e tests", function() {
         let jobIdParams1 = [functionSig,h.zeroAddress,chainId,blocky.timestamp,maxGasFee,_window,interval,tip];
         jobId = keccak256(abiCoder.encode(paramTypes,jobIdParams1));
         await autopay.initKeeperJob(functionSig,h.zeroAddress,chainId,blocky.timestamp,maxGasFee,_window,interval,tip);
-        let detail = await autopay.continuousJobbyId(jobId);
+        let detail = await autopay.continuousJobById(jobId);
         expect(detail[0]).to.equal(functionSig);
         expect(detail[1]).to.equal(h.zeroAddress);
         expect(detail[2]).to.equal(chainId);
