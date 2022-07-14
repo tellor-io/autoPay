@@ -23,8 +23,8 @@ describe("Autopay - function tests", () => {
     autopay = await Autopay.deploy(tellor.address, tellor.address, accounts[0].address, 10);
     await autopay.deployed();
     firstBlocky = await h.getBlock();
-    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,"0x");
-    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0]));
+    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0,"0x");
+    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0]));
     await tellor.approve(autopay.address, h.toWei("1000"));
     await autopay.fundFeed(bytesId, QUERYID1, h.toWei("1000"));
     payerBefore = await autopay.getDataFeed(bytesId);
@@ -85,13 +85,13 @@ describe("Autopay - function tests", () => {
     bytesId = keccak256(abiCoder.encode(["string"], ["Joshua"]));
     result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array));
     assert.include(result.message, "insufficient feed balance");
-    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0]));
+    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0]));
     blockyNoVal = await h.getBlock()
     result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)]));
     assert.include(result.message, "no value exists at timestamp");
     blocky = await h.getBlock();
-    await autopay.connect(accounts[10]).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,"0x");
-    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0]));
+    await autopay.connect(accounts[10]).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0,"0x");
+    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0]));
     await tellor.approve(autopay.address, h.toWei("100"));
     await autopay.fundFeed(bytesId, QUERYID1, h.toWei("100"));
     await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
@@ -135,18 +135,21 @@ describe("Autopay - function tests", () => {
   });
   
   it("setupDataFeed", async () => {
-    let queryIdToUse;
-    await h.expectThrowMessage(autopay.setupDataFeed(h.uintTob32(200),h.toWei("1"),blocky.timestamp,3600,600,0,"0x"));//must be hash
-    await h.expectThrowMessage(autopay.setupDataFeed(QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,0,"0x"));//fee is zerio
-    await h.expectThrowMessage(autopay.setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,600,600,0,"0x"));//already set up
-    await h.expectThrowMessage(autopay.setupDataFeed(QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,0,"0x"));//interval > window
-    let result = await autopay.getDataFeed(bytesId);
-    expect(result[0]).to.equal(h.toWei("1"));
-    expect(result[1]).to.equal(h.toWei("1000"));
-    expect(result[2]).to.equal(firstBlocky.timestamp);
-    expect(result[3]).to.equal(3600);
-    expect(result[4]).to.equal(600);
-    expect(result[5]).to.equal(0);
+    await h.expectThrow(autopay.setupDataFeed(h.uintTob32(200),h.toWei("1"),blocky.timestamp,3600,600,0,0,"0x"));//must be hash
+    await h.expectThrow(autopay.setupDataFeed(QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,0,0,"0x"));//reward is zero
+    await h.expectThrow(autopay.setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,600,600,0,0,"0x"));//already set up
+    await h.expectThrow(autopay.setupDataFeed(QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,0,0,"0x"));//interval > window
+    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3,"0x");
+    feedId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3]));
+    let result = await autopay.getDataFeed(feedId);
+    expect(result.reward).to.equal(h.toWei("1"))
+    expect(result.balance).to.equal(0);
+    expect(result.startTime).to.equal(firstBlocky.timestamp);
+    expect(result.interval).to.equal(3600);
+    expect(result.window).to.equal(600);
+    expect(result.priceThreshold).to.equal(1);
+    expect(result.rewardIncreasePerSecond).to.equal(3);
+    expect(result.feedsWithFundingIndex).to.equal(0);
   });
   it("getRewardClaimedStatus", async () => {
     let v =  array[0]
@@ -159,9 +162,9 @@ describe("Autopay - function tests", () => {
   });
   it("tip", async () => {
     await tellor.faucet(accounts[0].address)
-    await h.expectThrowMessage(autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x'));
+    await h.expectThrow(autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x'));
     await tellor.approve(autopay.address,web3.utils.toWei("100"))
-    await h.expectThrowMessage(autopay.tip(h.uintTob32(200),web3.utils.toWei("100"),'0x')) //must be hash
+    await h.expectThrow(autopay.tip(h.uintTob32(200),web3.utils.toWei("100"),'0x')) //must be hash
     await autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x')
     let res = await autopay.getCurrentTip(QUERYID1);
     assert(res == web3.utils.toWei("100"), "tip 1nshould be correct")
@@ -179,10 +182,10 @@ describe("Autopay - function tests", () => {
     let startBal = await tellor.balanceOf(accounts[2].address);
     await tellor.connect(accounts[4]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky1 = await h.getBlock();
-    await h.expectThrowMessage(autopay.claimOneTimeTip(QUERYID1,[blocky.timestamp]));//must have tip
+    await h.expectThrow(autopay.claimOneTimeTip(QUERYID1,[blocky.timestamp]));//must have tip
     await tellor.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x')
-    await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(QUERYID1,[blocky.timestamp]));//timestamp not eligible
+    await h.expectThrow(autopay.connect(accounts[4]).claimOneTimeTip(QUERYID1,[blocky.timestamp]));//timestamp not eligible
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky = await h.getBlock();
     await h.expectThrow(autopay.claimOneTimeTip(QUERYID1,[blocky.timestamp]));//must be the reporter
@@ -206,9 +209,10 @@ describe("Autopay - function tests", () => {
     expect(result[3]).to.equal(3600);
     expect(result[4]).to.equal(600);
     expect(result[5]).to.equal(0);
+    expect(result[6]).to.equal(0);
   });
   it("getCurrentTip", async () => {
-    await h.expectThrowMessage(autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x'));
+    await h.expectThrow(autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x'));
     await tellor.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x')
     let res = await autopay.getCurrentTip(QUERYID1);
@@ -292,15 +296,15 @@ describe("Autopay - function tests", () => {
     const QUERYID3 = h.uintTob32(3)
     const QUERYID4 = h.uintTob32(4)
     let feedId3 = keccak256(abiCoder.encode(
-      ["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],
-      [QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0]
+      ["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
+      [QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,0]
     ));
     let feedId4 = keccak256(abiCoder.encode(
-      ["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],
-      [QUERYID4,h.toWei("1"),blocky.timestamp,600,400,0]
+      ["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
+      [QUERYID4,h.toWei("1"),blocky.timestamp,600,400,0,0]
     ));
-    await autopay.setupDataFeed(QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,"0x");
-    await autopay.setupDataFeed(QUERYID4,h.toWei("1"),blocky.timestamp,600,400,0,"0x");
+    await autopay.setupDataFeed(QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,0,"0x");
+    await autopay.setupDataFeed(QUERYID4,h.toWei("1"),blocky.timestamp,600,400,0,0,"0x");
     await tellor.approve(autopay.address, h.toWei("2"));
     await autopay.fundFeed(feedId3,QUERYID3,h.toWei("1"))
     await autopay.fundFeed(feedId4,QUERYID4,h.toWei("1"))
@@ -338,11 +342,11 @@ describe("Autopay - function tests", () => {
     let blocky = await h.getBlock()
     //creating feedId to call function
     let feedId3 = keccak256(abiCoder.encode(
-      ["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],
-      [QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0]
+      ["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],
+      [QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,0]
     ));
     //awaiting dataFeed setup
-    await autopay.setupDataFeed(QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,"0x");
+    await autopay.setupDataFeed(QUERYID3,h.toWei("1"),blocky.timestamp,600,400,0,0,"0x");
 
     //Function call
     let response = await autopay.getQueryIdFromFeedId(feedId3)
@@ -484,8 +488,8 @@ describe("Autopay - function tests", () => {
     await tellor.connect(userAccount).approve(autopay.address,h.toWei("1000"))
     await autopay.connect(userAccount).tip(h.uintTob32(2),web3.utils.toWei("10"),'0x')
     assert(await autopay.getTipsByAddress(userAccount.address) == web3.utils.toWei("10"))
-    await autopay.connect(userAccount).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,"0x")
-    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0]))
+    await autopay.connect(userAccount).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0,"0x")
+    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0]))
     await autopay.connect(userAccount).fundFeed(bytesId, QUERYID1, h.toWei("99"))
     assert(await autopay.getTipsByAddress(userAccount.address) == web3.utils.toWei("109"))
   })

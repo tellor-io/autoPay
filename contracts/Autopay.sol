@@ -12,6 +12,7 @@ pragma solidity 0.8.3;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/ITellorFlex.sol";
+import "hardhat/console.sol";
 
 contract Autopay is UsingTellor {
     // Storage
@@ -29,7 +30,6 @@ contract Autopay is UsingTellor {
 
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
     bytes32[] public queryIdsWithFunding; // array of queryIds that have funding
-    // address[] public gasPayment; // array of addresses that funded a job tracked to pay them back remainder
 
     // Structs
     struct FeedDetails {
@@ -39,6 +39,7 @@ contract Autopay is UsingTellor {
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
         uint256 priceThreshold; //change in price necessitating an update 100 = 1%
+        uint256 rewardIncreasePerSecond; // amount reward increases per second (0 for flat rewards)
         uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
     }
 
@@ -94,7 +95,6 @@ contract Autopay is UsingTellor {
         address payable _tellor,
         address _token,
         address _owner,
-        // address _keeper,
         uint256 _fee
     ) UsingTellor(_tellor) {
         master = ITellor(_tellor);
@@ -218,6 +218,7 @@ contract Autopay is UsingTellor {
      * @param _interval amount of time between autopay windows
      * @param _window amount of time after each new interval when reports are eligible for tips
      * @param _priceThreshold amount price must change to automate update regardless of time (negated if 0, 100 = 1%)
+     * @param _rewardIncreasePerSecond amount reward increases per second within a window (0 for flat reward)
      * @param _queryData the data used by reporters to fulfill the query
      */
     function setupDataFeed(
@@ -227,6 +228,7 @@ contract Autopay is UsingTellor {
         uint256 _interval,
         uint256 _window,
         uint256 _priceThreshold,
+        uint256 _rewardIncreasePerSecond,
         bytes calldata _queryData
     ) external {
         require(
@@ -240,7 +242,8 @@ contract Autopay is UsingTellor {
                 _startTime,
                 _interval,
                 _window,
-                _priceThreshold
+                _priceThreshold,
+                _rewardIncreasePerSecond
             )
         );
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
@@ -255,6 +258,7 @@ contract Autopay is UsingTellor {
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
+        _feed.rewardIncreasePerSecond = _rewardIncreasePerSecond;
 
         currentFeeds[_queryId].push(_feedId);
         queryIdFromDataFeedId[_feedId] = _queryId;
@@ -518,7 +522,7 @@ contract Autopay is UsingTellor {
         );
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
         require(
-            keccak256(_valueRetrieved) != keccak256(bytes("")),
+            _valueRetrieved.length != 0,
             "no value exists at timestamp"
         );
         uint256 _n = (_timestamp - _feed.details.startTime) /
@@ -541,20 +545,21 @@ contract Autopay is UsingTellor {
                 _priceChange = (10000 * (_v2 - _v1)) / _v2;
             }
         }
+        uint256 _rewardAmount = _feed.details.reward;
         if (_priceChange <= _feed.details.priceThreshold) {
+            uint256 _timeDiff = _timestamp - _c;
             require(
-                _timestamp - _c < _feed.details.window,
+                _timeDiff < _feed.details.window,
                 "timestamp not within window"
             );
             require(
                 _timestampBefore < _c,
                 "timestamp not first report within window"
             );
+            _rewardAmount += _feed.details.rewardIncreasePerSecond * _timeDiff;
         }
-        uint256 _rewardAmount;
-        if (_feed.details.balance > _feed.details.reward) {
-            _rewardAmount = _feed.details.reward;
-            _feed.details.balance -= _feed.details.reward;
+        if (_feed.details.balance > _rewardAmount) {
+            _feed.details.balance -= _rewardAmount;
         } else {
             _rewardAmount = _feed.details.balance;
             _feed.details.balance = 0;
