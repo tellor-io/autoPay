@@ -83,12 +83,10 @@ describe("Autopay - function tests", () => {
     await autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array);
     await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array));
     bytesId = keccak256(abiCoder.encode(["string"], ["Joshua"]));
-    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array));
-    assert.include(result.message, "insufficient feed balance");
+    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, array));
     bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0]));
     blockyNoVal = await h.getBlock()
-    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)]));
-    assert.include(result.message, "no value exists at timestamp");
+    await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [blockyNoVal.timestamp - (3600 * 12)])); // no value exists at timestamp
     blocky = await h.getBlock();
     await autopay.connect(accounts[10]).setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0,"0x");
     bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0]));
@@ -102,10 +100,8 @@ describe("Autopay - function tests", () => {
     await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
     blocky = await h.getBlock();
     h.advanceTime(43201);
-    result = await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, QUERYID1, [blocky.timestamp]));
-    assert.include(result.message, "timestamp not within window");
-    result = await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, QUERYID1, [badBlocky.timestamp]));
-    assert.include(result.message, "timestamp not first report within window");
+    await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, QUERYID1, [blocky.timestamp])); // timestamp not within window
+    await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, QUERYID1, [badBlocky.timestamp])); // timestamp not first report within window
     // Variable updates
     dataFeedBefore = await autopay.getDataFeed(bytesId);
     await autopay.connect(accounts[1]).claimTip(bytesId, QUERYID1, [goodBlocky.timestamp]);

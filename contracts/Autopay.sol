@@ -154,7 +154,7 @@ contract Autopay is UsingTellor {
      * @param _queryId ID of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
-    function claimTip(
+    function claimTip0(
         bytes32 _feedId,
         bytes32 _queryId,
         uint256[] calldata _timestamps
@@ -583,5 +583,157 @@ contract Autopay is UsingTellor {
         }
         _feed.rewardClaimed[_timestamp] = true;
         return _rewardAmount;
+    }
+
+    function claimTip(
+        bytes32 _feedId,
+        bytes32 _queryId,
+        uint256[] calldata _timestamps) external {
+            uint256 _reward;
+            uint256 _cumulativeReward;
+            Feed storage _feed = dataFeed[_queryId][_feedId];
+            uint256 _balance = _feed.details.balance;
+
+            for(uint256 _i = 0; _i < _timestamps.length; _i++) {
+                require(block.timestamp - _timestamps[_i] > 12 hours, "buffer time has not passed");
+                require(master.getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender, "message sender not reporter for given queryId and timestamp");
+                (_reward,) = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
+                require(_reward > 0, "no reward to claim");
+                _cumulativeReward += _reward;
+                if(_cumulativeReward >= _balance) {
+                    require(_i == _timestamps.length - 1, "insufficient balance for all submitted timestamps");
+                    _cumulativeReward = _balance;
+                    // Adjust currently funded feeds
+                    if (feedsWithFunding.length > 1) {
+                        uint256 _idx = _feed.details.feedsWithFundingIndex - 1;
+                        // Replace unfunded feed in array with last element
+                        feedsWithFunding[_idx] = feedsWithFunding[
+                            feedsWithFunding.length - 1
+                        ];
+                        bytes32 _feedIdLastFunded = feedsWithFunding[_idx];
+                        bytes32 _queryIdLastFunded = queryIdFromDataFeedId[
+                            _feedIdLastFunded
+                        ];
+                        dataFeed[_queryIdLastFunded][_feedIdLastFunded]
+                            .details
+                            .feedsWithFundingIndex = _idx + 1;
+                    }
+                    feedsWithFunding.pop();
+                    _feed.details.feedsWithFundingIndex = 0;
+                }
+                _feed.rewardClaimed[_timestamps[_i]] = true;
+            }
+            _feed.details.balance -= _cumulativeReward;
+            require(
+                token.transfer(
+                    msg.sender,
+                    _cumulativeReward - ((_cumulativeReward * fee) / 1000)
+                )
+            );
+            token.approve(address(master), (_cumulativeReward * fee) / 1000);
+            ITellorFlex(address(master)).addStakingRewards(
+                (_cumulativeReward * fee) / 1000
+            );
+            emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
+    }
+
+    function claimTip_DO_N0T_EDIT(
+        bytes32 _feedId,
+        bytes32 _queryId,
+        uint256[] calldata _timestamps
+    ) external {
+        uint256 _reward;
+        uint256 _cumulativeReward;
+        for (uint256 _i = 0; _i < _timestamps.length; _i++) {
+            _reward = _claimTip(_feedId, _queryId, _timestamps[_i]);
+            require(
+                master.getReporterByTimestamp(_queryId, _timestamps[_i]) ==
+                    msg.sender,
+                "reporter mismatch"
+            );
+            _cumulativeReward += _reward;
+        }
+        require(
+            token.transfer(
+                msg.sender,
+                _cumulativeReward - ((_cumulativeReward * fee) / 1000)
+            )
+        );
+        token.approve(address(master), (_cumulativeReward * fee) / 1000);
+        ITellorFlex(address(master)).addStakingRewards(
+            (_cumulativeReward * fee) / 1000
+        );
+        emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
+    }
+
+     function _getRewardAmount(bytes32 _feedId, bytes32 _queryId, uint256 _timestamp)
+        public
+        view
+        returns (uint256, uint256) 
+    {
+        require(
+            block.timestamp - _timestamp < 12 weeks,
+            "timestamp too old to claim tip"
+        );
+        Feed storage _feed = dataFeed[_queryId][_feedId];
+        require(!_feed.rewardClaimed[_timestamp], "reward already claimed");
+        uint256 _n = (_timestamp - _feed.details.startTime) /
+            _feed.details.interval; // finds closest interval _n to timestamp
+        uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds timestamp _c of interval _n
+        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
+        if(_valueRetrieved.length == 0) {
+            return (0, 3);
+        }
+        (
+            ,
+            bytes memory _valueRetrievedBefore,
+            uint256 _timestampBefore
+        ) = getDataBefore(_queryId, _timestamp);
+        uint256 _priceChange = 0; //price change from last value to current value
+        if (_feed.details.priceThreshold != 0) {
+            uint256 _v1 = _bytesToUint(_valueRetrieved);
+            uint256 _v2 = _bytesToUint(_valueRetrievedBefore);
+            if (_v2 == 0) {
+                _priceChange = 10000;
+            } else if (_v1 >= _v2) {
+                _priceChange = (10000 * (_v1 - _v2)) / _v2;
+            } else {
+                _priceChange = (10000 * (_v2 - _v1)) / _v2;
+            }
+        }
+        uint256 _rewardAmount = _feed.details.reward;
+        if (_priceChange <= _feed.details.priceThreshold) {
+            uint256 _timeDiff = _timestamp - _c;
+            if(_timeDiff > _feed.details.window || _timestampBefore > _c) {
+                return (0, 4);
+            }
+            _rewardAmount += _feed.details.rewardIncreasePerSecond * _timeDiff;
+        }
+        if (_feed.details.balance > _rewardAmount) {
+            // _feed.details.balance -= _rewardAmount;
+        } else {
+            _rewardAmount = _feed.details.balance;
+            // _feed.details.balance = 0;
+            // Adjust currently funded feeds
+            // if (feedsWithFunding.length > 1) {
+            //     uint256 _idx = _feed.details.feedsWithFundingIndex - 1;
+            //     // Replace unfunded feed in array with last element
+            //     feedsWithFunding[_idx] = feedsWithFunding[
+            //         feedsWithFunding.length - 1
+            //     ];
+            //     bytes32 _feedIdLastFunded = feedsWithFunding[_idx];
+            //     bytes32 _queryIdLastFunded = queryIdFromDataFeedId[
+            //         _feedIdLastFunded
+            //     ];
+            //     dataFeed[_queryIdLastFunded][_feedIdLastFunded]
+            //         .details
+            //         .feedsWithFundingIndex = _idx + 1;
+            // }
+            // feedsWithFunding.pop();
+            // _feed.details.feedsWithFundingIndex = 0;
+        }
+        // _feed.rewardClaimed[_timestamp] = true;
+        return (_rewardAmount, 0);
+
     }
 }

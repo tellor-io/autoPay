@@ -648,4 +648,26 @@ describe("Autopay - e2e tests", function() {
     expectedBalance = expectedBalance + expectedReward
     expect(await tellor.balanceOf(accounts[1].address)).to.equal(expectedBalance)
   })
+  
+  it.only("mytest", async function() {
+    blocky0 = await h.getBlock()
+    const INTERVAL = 3600
+    // setup data feed with time based rewards
+    await tellor.faucet(accounts[2].address)
+    await tellor.connect(accounts[2]).approve(autopay.address, h.toWei("1000"))
+    feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, INTERVAL, 600, 0, h.toWei("1")]));
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, h.toWei("1"), "0x");
+    await autopay.connect(accounts[2]).fundFeed(feedId, QUERYID1, h.toWei("1000"));
+
+    // advance some time within window
+    await h.advanceTime(10)
+
+    // submit value within window
+    await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky1 = await h.getBlock();
+
+    // advance time 12 weeks
+    await h.advanceTime(3600 * 24 * 7 * 12)
+    result = await autopay._getRewardAmount(feedId, QUERYID1, blocky1.timestamp)
+  })
 });
