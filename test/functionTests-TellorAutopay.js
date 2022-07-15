@@ -20,7 +20,7 @@ describe("Autopay - function tests", () => {
     await tellor.deployed();
     for(i=0; i<2; i++){await tellor.faucet(accounts[0].address);}
     const Autopay = await ethers.getContractFactory("Autopay");
-    autopay = await Autopay.deploy(tellor.address, tellor.address, accounts[0].address, 10);
+    autopay = await Autopay.deploy(tellor.address, tellor.address, 10);
     await autopay.deployed();
     firstBlocky = await h.getBlock();
     await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0,"0x");
@@ -49,7 +49,6 @@ describe("Autopay - function tests", () => {
   it("constructor", async () => {
     expect(await autopay.master()).to.equal(tellor.address);
     expect(await autopay.token()).to.equal(tellor.address);
-    expect(await autopay.owner()).to.equal(accounts[0].address);
     expect(await autopay.fee()).to.equal(10)
   });
   
