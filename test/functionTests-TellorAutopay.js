@@ -12,6 +12,7 @@ describe("Autopay - function tests", () => {
   let abiCoder = new ethers.utils.AbiCoder();
   const QUERYID1 = h.uintTob32(1);
   const QUERYID2 = h.uintTob32(2);
+  const FEE = 10
 
   beforeEach(async () => {
     accounts = await ethers.getSigners();
@@ -20,7 +21,7 @@ describe("Autopay - function tests", () => {
     await tellor.deployed();
     for(i=0; i<2; i++){await tellor.faucet(accounts[0].address);}
     const Autopay = await ethers.getContractFactory("Autopay");
-    autopay = await Autopay.deploy(tellor.address, tellor.address, 10);
+    autopay = await Autopay.deploy(tellor.address, tellor.address, FEE);
     await autopay.deployed();
     firstBlocky = await h.getBlock();
     await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0,"0x");
@@ -72,7 +73,7 @@ describe("Autopay - function tests", () => {
     expect(await tellor.balanceOf(autopay.address)).to.equal(h.toWei("997"));
   });
   
-  it("_claimTip", async () => {
+  it("_getRewardAmount", async () => {
     // Require checks
     let result;
     let dataFeedAfter;
@@ -488,4 +489,67 @@ describe("Autopay - function tests", () => {
     await autopay.connect(userAccount).fundFeed(bytesId, QUERYID1, h.toWei("99"))
     assert(await autopay.getTipsByAddress(userAccount.address) == web3.utils.toWei("109"))
   })
+  it("getRewardAmount", async () => { 
+    await h.advanceTime(3600)
+    blocky0 = await h.getBlock()
+    const INTERVAL = 3600
+    // setup data feed with time based rewards
+    await tellor.faucet(accounts[2].address)
+    await tellor.connect(accounts[2]).approve(autopay.address, h.toWei("1000"))
+    feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, INTERVAL, 600, 0, h.toWei("1")]));
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, h.toWei("1"), "0x");
+    await autopay.connect(accounts[2]).fundFeed(feedId, QUERYID1, h.toWei("1000"));
+
+    // advance some time within window
+    await h.advanceTime(10)
+
+    // submit value within window
+    await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky1 = await h.getBlock();
+
+    // advance some time to next window
+    await h.advanceTime(INTERVAL + 10)
+
+    // submit value inside next window
+    await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky2 = await h.getBlock();
+
+    // advance some time to next window
+    await h.advanceTime(INTERVAL + 10)
+
+    // submit value inside next window
+    await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky3 = await h.getBlock();
+
+    // query non-existent rewards
+    await h.expectThrow(autopay.getRewardAmount(feedId, h.uintTob32(1), [blocky.timestamp]))
+
+    // query rewards
+    expectedReward = (BigInt(h.toWei("1")) + BigInt(h.toWei("1")) * (BigInt(blocky1.timestamp) - BigInt(blocky0.timestamp)))
+    expectedReward = expectedReward - (expectedReward * BigInt(FEE) / BigInt(1000)) // fee
+    rewardSum = expectedReward
+    expect(await autopay.getRewardAmount(feedId, QUERYID1, [blocky1.timestamp])).to.equal(expectedReward)
+
+    expectedReward = (BigInt(h.toWei("1")) + BigInt(h.toWei("1")) * (BigInt(blocky2.timestamp) - BigInt(blocky0.timestamp + INTERVAL * 1)))
+    expectedReward = expectedReward - (expectedReward * BigInt(FEE) / BigInt(1000)) // fee
+    rewardSum = rewardSum + expectedReward
+    expect(await autopay.getRewardAmount(feedId, QUERYID1, [blocky2.timestamp])).to.equal(expectedReward)
+
+    expectedReward = (BigInt(h.toWei("1")) + BigInt(h.toWei("1")) * (BigInt(blocky3.timestamp) - BigInt(blocky0.timestamp + INTERVAL * 2)))
+    expectedReward = expectedReward - (expectedReward * BigInt(FEE) / BigInt(1000)) // fee
+    rewardSum = rewardSum + expectedReward
+    expect(await autopay.getRewardAmount(feedId, QUERYID1, [blocky3.timestamp])).to.equal(expectedReward)
+
+    // query rewards for multiple queries
+    expect(await autopay.getRewardAmount(feedId, QUERYID1, [blocky1.timestamp, blocky2.timestamp, blocky3.timestamp])).to.equal(rewardSum)
+
+    // query rewards 1 week later
+    await h.advanceTime(86400 * 7)
+    expect(await autopay.getRewardAmount(feedId, QUERYID1, [blocky1.timestamp, blocky2.timestamp, blocky3.timestamp])).to.equal(rewardSum)
+
+    // query after 12 weeks
+    await h.advanceTime(86400 * 7 * 12)
+    await h.expectThrow(autopay.getRewardAmount(feedId, QUERYID1, [blocky1.timestamp, blocky2.timestamp, blocky3.timestamp]))
+  })
+
 });

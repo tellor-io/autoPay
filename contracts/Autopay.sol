@@ -444,7 +444,7 @@ contract Autopay is UsingTellor {
 
     /**
      * @dev Getter function to read potential rewards for a set of oracle submissions
-     * NOTE: Does not consider reporter address or 12-hour dispute buffer period
+     * NOTE: Does not consider reporter address, 12-hour dispute buffer period, or duplicate timestamps
      * @param _feedId dataFeed unique identifier
      * @param _queryId unique identifier of reported data
      * @param _timestamps array of timestamps of oracle submissions
@@ -467,10 +467,11 @@ contract Autopay is UsingTellor {
         if (_cumulativeReward > _feed.balance) {
             _cumulativeReward = _feed.balance;
         }
+        _cumulativeReward -= ((_cumulativeReward * fee) / 1000);
     }
 
     /**
-     * @dev Getter function to read if a reward has been claimed
+     * @dev Getter function for reading whether a reward has been claimed
      * @param _feedId feedId of dataFeed
      * @param _queryId id of reported data
      * @param _timestamp id or reported data
@@ -484,6 +485,11 @@ contract Autopay is UsingTellor {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
     }
 
+    /**
+     * @dev Getter function for retrieving the total amount of tips paid by a given address
+     * @param _user address of user to query
+     * @return uint256 total amount of tips paid by user
+     */
     function getTipsByAddress(address _user) external view returns (uint256) {
         return userTipsTotal[_user];
     }
@@ -505,14 +511,14 @@ contract Autopay is UsingTellor {
     }
 
     /**
-     ** @dev Internal function which allows Tellor reporters to claim their one time tips
+     ** @dev Internal function which determines tip eligibility for a given oracle submission
      * @param _queryId id of reported data
      * @param _timestamp timestamp of one time tip
-     * @return amount of tip
+     * @return _tipAmount of tip
      */
     function _claimOneTimeTip(bytes32 _queryId, uint256 _timestamp)
         internal
-        returns (uint256)
+        returns (uint256 _tipAmount)
     {
         Tip[] storage _tips = tips[_queryId];
         require(
@@ -549,7 +555,7 @@ contract Autopay is UsingTellor {
             "timestamp not eligible for tip"
         );
         require(_tips[_min].amount > 0, "tip already claimed");
-        uint256 _tipAmount = _tips[_min].amount;
+        _tipAmount = _tips[_min].amount;
         _tips[_min].amount = 0;
         return _tipAmount;
     }
