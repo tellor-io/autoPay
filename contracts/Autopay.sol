@@ -4,9 +4,8 @@ pragma solidity 0.8.3;
 /**
  @author Tellor Inc.
  @title Autopay
- @dev This is contract for automatically paying for Tellor oracle data at
- * specific time intervals. Any non-rebasing ERC20 token can be used for payment.
- * Only the first data submission within each time window gets a reward.
+ @dev This is a contract for automatically paying for Tellor oracle data at
+ * specific time intervals, as well as one time tips.
 */
 
 import "usingtellor/contracts/UsingTellor.sol";
@@ -17,21 +16,24 @@ contract Autopay is UsingTellor {
     // Storage
     ITellor public master; // Tellor contract address
     IERC20 public token; // TRB token address
-    address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
-    mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryId to dataFeedId to details
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryId to dataFeedIds array
-    mapping(bytes32 => Tip[]) public tips; // mapping queryId to tips
+    mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryId to dataFeedId to details
     mapping(bytes32 => bytes32) public queryIdFromDataFeedId; // mapping dataFeedId to queryId
     mapping(bytes32 => uint256) public queryIdsWithFundingIndex; // mapping queryId to queryIdsWithFunding index plus one (0 if not in array)
+    mapping(bytes32 => Tip[]) public tips; // mapping queryId to tips
     mapping(address => uint256) public userTipsTotal; // track user tip total per user
 
     bytes32[] public feedsWithFunding; // array of dataFeedIds that have funding
     bytes32[] public queryIdsWithFunding; // array of queryIds that have funding
-    // address[] public gasPayment; // array of addresses that funded a job tracked to pay them back remainder
 
     // Structs
+    struct Feed {
+        FeedDetails details;
+        mapping(uint256 => bool) rewardClaimed; // tracks which tips were already paid out
+    }
+
     struct FeedDetails {
         uint256 reward; // amount paid for each eligible data submission
         uint256 balance; // account remaining balance
@@ -39,12 +41,8 @@ contract Autopay is UsingTellor {
         uint256 interval; // time between pay periods
         uint256 window; // amount of time data can be submitted per interval
         uint256 priceThreshold; //change in price necessitating an update 100 = 1%
+        uint256 rewardIncreasePerSecond; // amount reward increases per second within window (0 for flat rewards)
         uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
-    }
-
-    struct Feed {
-        FeedDetails details;
-        mapping(uint256 => bool) rewardClaimed; // tracks which tips were already paid out
     }
 
     struct Tip {
@@ -53,17 +51,17 @@ contract Autopay is UsingTellor {
     }
 
     // Events
-    event NewDataFeed(
-        bytes32 _queryId,
-        bytes32 _feedId,
-        bytes _queryData,
-        address _feedCreator
-    );
     event DataFeedFunded(
         bytes32 _queryId,
         bytes32 _feedId,
         uint256 _amount,
         address _feedFunder
+    );
+    event NewDataFeed(
+        bytes32 _queryId,
+        bytes32 _feedId,
+        bytes _queryData,
+        address _feedCreator
     );
     event OneTimeTipClaimed(
         bytes32 _queryId,
@@ -87,20 +85,16 @@ contract Autopay is UsingTellor {
     /**
      * @dev Initializes system parameters
      * @param _tellor address of Tellor contract
-     * @param _owner address of fee recipient
+     * @param _token address of token used for tips
      * @param _fee percentage, 1000 is 100%, 50 is 5%, etc.
      */
     constructor(
         address payable _tellor,
         address _token,
-        address _owner,
-        // address _keeper,
         uint256 _fee
     ) UsingTellor(_tellor) {
         master = ITellor(_tellor);
         token = IERC20(_token);
-        // keeper = Keeper(_keeper);
-        owner = _owner;
         fee = _fee;
     }
 
@@ -152,24 +146,60 @@ contract Autopay is UsingTellor {
      * @dev Allows Tellor reporters to claim their tips in batches
      * @param _feedId unique feed identifier
      * @param _queryId ID of reported data
-     * @param _timestamps[] batch of timestamps array of reported data eligible for reward
+     * @param _timestamps batch of timestamps array of reported data eligible for reward
      */
     function claimTip(
         bytes32 _feedId,
         bytes32 _queryId,
         uint256[] calldata _timestamps
     ) external {
-        uint256 _reward;
         uint256 _cumulativeReward;
+        Feed storage _feed = dataFeed[_queryId][_feedId];
+        uint256 _balance = _feed.details.balance;
+
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _reward = _claimTip(_feedId, _queryId, _timestamps[_i]);
+            require(
+                block.timestamp - _timestamps[_i] > 12 hours,
+                "buffer time has not passed"
+            );
             require(
                 master.getReporterByTimestamp(_queryId, _timestamps[_i]) ==
                     msg.sender,
-                "reporter mismatch"
+                "message sender not reporter for given queryId and timestamp"
             );
-            _cumulativeReward += _reward;
+            _cumulativeReward += _getRewardAmount(
+                _feedId,
+                _queryId,
+                _timestamps[_i]
+            );
+            if (_cumulativeReward >= _balance) {
+                // Balance runs out
+                require(
+                    _i == _timestamps.length - 1,
+                    "insufficient balance for all submitted timestamps"
+                );
+                _cumulativeReward = _balance;
+                // Adjust currently funded feeds
+                if (feedsWithFunding.length > 1) {
+                    uint256 _idx = _feed.details.feedsWithFundingIndex - 1;
+                    // Replace unfunded feed in array with last element
+                    feedsWithFunding[_idx] = feedsWithFunding[
+                        feedsWithFunding.length - 1
+                    ];
+                    bytes32 _feedIdLastFunded = feedsWithFunding[_idx];
+                    bytes32 _queryIdLastFunded = queryIdFromDataFeedId[
+                        _feedIdLastFunded
+                    ];
+                    dataFeed[_queryIdLastFunded][_feedIdLastFunded]
+                        .details
+                        .feedsWithFundingIndex = _idx + 1;
+                }
+                feedsWithFunding.pop();
+                _feed.details.feedsWithFundingIndex = 0;
+            }
+            _feed.rewardClaimed[_timestamps[_i]] = true;
         }
+        _feed.details.balance -= _cumulativeReward;
         require(
             token.transfer(
                 msg.sender,
@@ -218,6 +248,7 @@ contract Autopay is UsingTellor {
      * @param _interval amount of time between autopay windows
      * @param _window amount of time after each new interval when reports are eligible for tips
      * @param _priceThreshold amount price must change to automate update regardless of time (negated if 0, 100 = 1%)
+     * @param _rewardIncreasePerSecond amount reward increases per second within a window (0 for flat reward)
      * @param _queryData the data used by reporters to fulfill the query
      */
     function setupDataFeed(
@@ -227,6 +258,7 @@ contract Autopay is UsingTellor {
         uint256 _interval,
         uint256 _window,
         uint256 _priceThreshold,
+        uint256 _rewardIncreasePerSecond,
         bytes calldata _queryData
     ) external {
         require(
@@ -240,7 +272,8 @@ contract Autopay is UsingTellor {
                 _startTime,
                 _interval,
                 _window,
-                _priceThreshold
+                _priceThreshold,
+                _rewardIncreasePerSecond
             )
         );
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
@@ -255,6 +288,7 @@ contract Autopay is UsingTellor {
         _feed.interval = _interval;
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
+        _feed.rewardIncreasePerSecond = _rewardIncreasePerSecond;
 
         currentFeeds[_queryId].push(_feedId);
         queryIdFromDataFeedId[_feedId] = _queryId;
@@ -396,9 +430,9 @@ contract Autopay is UsingTellor {
     }
 
     /**
-     * @dev getter function to lookup query IDs from dataFeed IDs
+     * @dev Getter function to lookup query IDs from dataFeed IDs
      * @param _feedId dataFeed unique identifier
-     * @return corresponding query ID
+     * @return bytes32 corresponding query ID
      */
     function getQueryIdFromFeedId(bytes32 _feedId)
         external
@@ -409,7 +443,35 @@ contract Autopay is UsingTellor {
     }
 
     /**
-     * @dev Getter function to read if a reward has been claimed
+     * @dev Getter function to read potential rewards for a set of oracle submissions
+     * NOTE: Does not consider reporter address, 12-hour dispute buffer period, or duplicate timestamps
+     * @param _feedId dataFeed unique identifier
+     * @param _queryId unique identifier of reported data
+     * @param _timestamps array of timestamps of oracle submissions
+     * @return _cumulativeReward total potential reward for the set of oracle submissions
+     */
+    function getRewardAmount(
+        bytes32 _feedId,
+        bytes32 _queryId,
+        uint256[] calldata _timestamps
+    ) external view returns (uint256 _cumulativeReward) {
+        FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
+
+        for (uint256 _i = 0; _i < _timestamps.length; _i++) {
+            _cumulativeReward += _getRewardAmount(
+                _feedId,
+                _queryId,
+                _timestamps[_i]
+            );
+        }
+        if (_cumulativeReward > _feed.balance) {
+            _cumulativeReward = _feed.balance;
+        }
+        _cumulativeReward -= ((_cumulativeReward * fee) / 1000);
+    }
+
+    /**
+     * @dev Getter function for reading whether a reward has been claimed
      * @param _feedId feedId of dataFeed
      * @param _queryId id of reported data
      * @param _timestamp id or reported data
@@ -423,6 +485,11 @@ contract Autopay is UsingTellor {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
     }
 
+    /**
+     * @dev Getter function for retrieving the total amount of tips paid by a given address
+     * @param _user address of user to query
+     * @return uint256 total amount of tips paid by user
+     */
     function getTipsByAddress(address _user) external view returns (uint256) {
         return userTipsTotal[_user];
     }
@@ -444,14 +511,14 @@ contract Autopay is UsingTellor {
     }
 
     /**
-     ** @dev Internal function which allows Tellor reporters to claim their one time tips
+     ** @dev Internal function which determines tip eligibility for a given oracle submission
      * @param _queryId id of reported data
      * @param _timestamp timestamp of one time tip
-     * @return amount of tip
+     * @return _tipAmount of tip
      */
     function _claimOneTimeTip(bytes32 _queryId, uint256 _timestamp)
         internal
-        returns (uint256)
+        returns (uint256 _tipAmount)
     {
         Tip[] storage _tips = tips[_queryId];
         require(
@@ -488,48 +555,40 @@ contract Autopay is UsingTellor {
             "timestamp not eligible for tip"
         );
         require(_tips[_min].amount > 0, "tip already claimed");
-        uint256 _tipAmount = _tips[_min].amount;
+        _tipAmount = _tips[_min].amount;
         _tips[_min].amount = 0;
         return _tipAmount;
     }
 
     /**
-     * @dev Internal function which allows Tellor reporters to claim their autopay tips
-     * @param _feedId of dataFeed
+     * @dev Internal function which determines the reward amount for a given oracle submission
+     * @param _feedId id of dataFeed
      * @param _queryId id of reported data
      * @param _timestamp timestamp of reported data eligible for reward
-     * @return uint256 reward amount
+     * @return _rewardAmount potential reward amount for the given oracle submission
      */
-    function _claimTip(
+    function _getRewardAmount(
         bytes32 _feedId,
         bytes32 _queryId,
         uint256 _timestamp
-    ) internal returns (uint256) {
-        Feed storage _feed = dataFeed[_queryId][_feedId];
-        require(_feed.details.balance > 0, "insufficient feed balance");
-        require(!_feed.rewardClaimed[_timestamp], "reward already claimed");
-        require(
-            block.timestamp - _timestamp > 12 hours,
-            "buffer time has not passed"
-        );
+    ) internal view returns (uint256 _rewardAmount) {
         require(
             block.timestamp - _timestamp < 12 weeks,
             "timestamp too old to claim tip"
         );
-        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
-        require(
-            keccak256(_valueRetrieved) != keccak256(bytes("")),
-            "no value exists at timestamp"
-        );
+        Feed storage _feed = dataFeed[_queryId][_feedId];
+        require(!_feed.rewardClaimed[_timestamp], "reward already claimed");
         uint256 _n = (_timestamp - _feed.details.startTime) /
             _feed.details.interval; // finds closest interval _n to timestamp
-        uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds timestamp _c of interval _n
+        uint256 _c = _feed.details.startTime + _feed.details.interval * _n; // finds start timestamp _c of interval _n
+        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
+        require(_valueRetrieved.length != 0, "no value exists at timestamp");
         (
             ,
             bytes memory _valueRetrievedBefore,
             uint256 _timestampBefore
         ) = getDataBefore(_queryId, _timestamp);
-        uint256 _priceChange = 0; //price change from last value to current value
+        uint256 _priceChange = 0; // price change from last value to current value
         if (_feed.details.priceThreshold != 0) {
             uint256 _v1 = _bytesToUint(_valueRetrieved);
             uint256 _v2 = _bytesToUint(_valueRetrievedBefore);
@@ -541,42 +600,22 @@ contract Autopay is UsingTellor {
                 _priceChange = (10000 * (_v2 - _v1)) / _v2;
             }
         }
+        _rewardAmount = _feed.details.reward;
         if (_priceChange <= _feed.details.priceThreshold) {
+            uint256 _timeDiff = _timestamp - _c;
             require(
-                _timestamp - _c < _feed.details.window,
+                _timeDiff < _feed.details.window,
                 "timestamp not within window"
             );
             require(
                 _timestampBefore < _c,
                 "timestamp not first report within window"
             );
+            // calculate time based reward if applicable
+            _rewardAmount += _feed.details.rewardIncreasePerSecond * _timeDiff;
         }
-        uint256 _rewardAmount;
-        if (_feed.details.balance > _feed.details.reward) {
-            _rewardAmount = _feed.details.reward;
-            _feed.details.balance -= _feed.details.reward;
-        } else {
+        if (_feed.details.balance < _rewardAmount) {
             _rewardAmount = _feed.details.balance;
-            _feed.details.balance = 0;
-            // Adjust currently funded feeds
-            if (feedsWithFunding.length > 1) {
-                uint256 _idx = _feed.details.feedsWithFundingIndex - 1;
-                // Replace unfunded feed in array with last element
-                feedsWithFunding[_idx] = feedsWithFunding[
-                    feedsWithFunding.length - 1
-                ];
-                bytes32 _feedIdLastFunded = feedsWithFunding[_idx];
-                bytes32 _queryIdLastFunded = queryIdFromDataFeedId[
-                    _feedIdLastFunded
-                ];
-                dataFeed[_queryIdLastFunded][_feedIdLastFunded]
-                    .details
-                    .feedsWithFundingIndex = _idx + 1;
-            }
-            feedsWithFunding.pop();
-            _feed.details.feedsWithFundingIndex = 0;
         }
-        _feed.rewardClaimed[_timestamp] = true;
-        return _rewardAmount;
     }
 }
