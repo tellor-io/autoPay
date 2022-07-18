@@ -29,7 +29,9 @@ Run `setUpFeed` then `fundFeed`
         uint256 _priceThreshold,
         bytes calldata _queryData
     )
+    */
 
+    
     .......
 
 
@@ -108,6 +110,7 @@ Install Dependencies
 ```
 npm i
 ```
+
 Compile Smart Contracts
 ```
 npx hardhat compile

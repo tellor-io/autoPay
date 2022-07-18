@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.3;
 
+import "usingtellor/contracts/UsingTellor.sol";
+import "./interfaces/IERC20.sol";
+import "./interfaces/ITellorFlex.sol";
+
 /**
  @author Tellor Inc.
  @title Autopay
  @dev This is a contract for automatically paying for Tellor oracle data at
  * specific time intervals, as well as one time tips.
 */
-
-import "usingtellor/contracts/UsingTellor.sol";
-import "./interfaces/IERC20.sol";
-import "./interfaces/ITellorFlex.sol";
-
 contract Autopay is UsingTellor {
     // Storage
     ITellor public master; // Tellor contract address
@@ -103,9 +102,7 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
-    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps)
-        external
-    {
+    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps) external{
         require(
             tips[_queryId].length > 0,
             "no tips submitted for this queryId"
@@ -156,7 +153,6 @@ contract Autopay is UsingTellor {
         uint256 _cumulativeReward;
         Feed storage _feed = dataFeed[_queryId][_feedId];
         uint256 _balance = _feed.details.balance;
-
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             require(
                 block.timestamp - _timestamps[_i] > 12 hours,
@@ -167,6 +163,7 @@ contract Autopay is UsingTellor {
                     msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
+            require(!isInDispute(_queryId, _timestamps[_i]), "cannot be in dispute");
             _cumulativeReward += _getRewardAmount(
                 _feedId,
                 _queryId,
@@ -219,11 +216,7 @@ contract Autopay is UsingTellor {
      * @param _queryId identifier of reported data type associated with feed
      * @param _amount quantity of tokens to fund feed
      */
-    function fundFeed(
-        bytes32 _feedId,
-        bytes32 _queryId,
-        uint256 _amount
-    ) external {
+    function fundFeed(bytes32 _feedId, bytes32 _queryId, uint256 _amount) external {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
         require(_feed.reward > 0, "feed not set up");
         _feed.balance += _amount;
@@ -289,7 +282,6 @@ contract Autopay is UsingTellor {
         _feed.window = _window;
         _feed.priceThreshold = _priceThreshold;
         _feed.rewardIncreasePerSecond = _rewardIncreasePerSecond;
-
         currentFeeds[_queryId].push(_feedId);
         queryIdFromDataFeedId[_feedId] = _queryId;
         emit NewDataFeed(_queryId, _feedId, _queryData, msg.sender);
@@ -371,11 +363,7 @@ contract Autopay is UsingTellor {
      * @param _feedId unique feedId of parameters
      * @return FeedDetails details of specified feed
      */
-    function getDataFeed(bytes32 _feedId)
-        external
-        view
-        returns (FeedDetails memory)
-    {
+    function getDataFeed(bytes32 _feedId) external view returns (FeedDetails memory){
         return (dataFeed[queryIdFromDataFeedId[_feedId]][_feedId].details);
     }
 
@@ -407,11 +395,7 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @return Tip struct (amount/timestamp) of all past tips
      */
-    function getPastTips(bytes32 _queryId)
-        external
-        view
-        returns (Tip[] memory)
-    {
+    function getPastTips(bytes32 _queryId) external view returns (Tip[] memory){
         return tips[_queryId];
     }
 
@@ -434,11 +418,7 @@ contract Autopay is UsingTellor {
      * @param _feedId dataFeed unique identifier
      * @return bytes32 corresponding query ID
      */
-    function getQueryIdFromFeedId(bytes32 _feedId)
-        external
-        view
-        returns (bytes32)
-    {
+    function getQueryIdFromFeedId(bytes32 _feedId) external view returns (bytes32){
         return queryIdFromDataFeedId[_feedId];
     }
 
@@ -456,7 +436,6 @@ contract Autopay is UsingTellor {
         uint256[] calldata _timestamps
     ) external view returns (uint256 _cumulativeReward) {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
-
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             _cumulativeReward += _getRewardAmount(
                 _feedId,
@@ -500,13 +479,9 @@ contract Autopay is UsingTellor {
      * @param _b bytes value to convert to uint256
      * @return _number uint256 converted from bytes
      */
-    function _bytesToUint(bytes memory _b)
-        internal
-        pure
-        returns (uint256 _number)
-    {
-        for (uint256 i = 0; i < _b.length; i++) {
-            _number = _number + uint8(_b[i]);
+    function _bytesToUint(bytes memory _b) internal pure returns (uint256 _number){
+        for (uint256 _i = 0; _i < _b.length; _i++) {
+            _number = _number + uint8(_b[_i]);
         }
     }
 
@@ -529,11 +504,7 @@ contract Autopay is UsingTellor {
             msg.sender == master.getReporterByTimestamp(_queryId, _timestamp),
             "message sender not reporter for given queryId and timestamp"
         );
-        bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
-        require(
-            keccak256(_valueRetrieved) != keccak256(bytes("")),
-            "no value exists at timestamp"
-        );
+        require(!isInDispute(_queryId, _timestamp), "cannot be in dispute");
         uint256 _min = 0;
         uint256 _max = _tips.length;
         uint256 _mid;
