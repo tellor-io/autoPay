@@ -9,13 +9,11 @@ pragma solidity 0.8.3;
  * Only the first data submission within each time window gets a reward.
 */
 
-import "usingtellor/contracts/UsingTellor.sol";
+import "./usingtellor/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
-import "./interfaces/ITellorFlex.sol";
 
 contract Keeper is UsingTellor {
     // Storage
-    ITellor public master; // Tellor contract address
     IERC20 public token; // TRB token address
     address public owner;
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
@@ -77,13 +75,18 @@ contract Keeper is UsingTellor {
     );
 
     // Functions
+    /**
+     * @dev Initializes system parameters
+     * @param _tellor address of Tellor contract
+     * @param _token address of token used for tips
+     * @param _fee percentage, 1000 is 100%, 50 is 5%, etc.
+     */
     constructor(
         address payable _tellor,
         address _token,
         address _owner,
         uint256 _fee
     ) UsingTellor(_tellor) {
-        master = ITellor(_tellor);
         token = IERC20(_token);
         owner = _owner;
         fee = _fee;
@@ -309,8 +312,8 @@ contract Keeper is UsingTellor {
                 _keeperTips.amount - ((_keeperTips.amount * fee) / 1000)
             )
         );
-        token.approve(address(master), (_keeperTips.amount * fee) / 1000);
-        ITellorFlex(address(master)).addStakingRewards(
+        token.approve(address(tellor), (_keeperTips.amount * fee) / 1000);
+        tellor.addStakingRewards(
             (_keeperTips.amount * fee) / 1000
         );
         _keeperTips.amount = 0;
