@@ -120,9 +120,7 @@ contract Autopay is UsingTellor {
             )
         );
         token.approve(address(tellor), (_cumulativeReward * fee) / 1000);
-        tellor.addStakingRewards(
-            (_cumulativeReward * fee) / 1000
-        );
+        tellor.addStakingRewards((_cumulativeReward * fee) / 1000);
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -160,8 +158,7 @@ contract Autopay is UsingTellor {
                 "buffer time has not passed"
             );
             require(
-                getReporterByTimestamp(_queryId, _timestamps[_i]) ==
-                    msg.sender,
+                getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
             _cumulativeReward += _getRewardAmount(
@@ -204,9 +201,7 @@ contract Autopay is UsingTellor {
             )
         );
         token.approve(address(tellor), (_cumulativeReward * fee) / 1000);
-        tellor.addStakingRewards(
-            (_cumulativeReward * fee) / 1000
-        );
+        tellor.addStakingRewards((_cumulativeReward * fee) / 1000);
         emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
     }
 
@@ -566,10 +561,7 @@ contract Autopay is UsingTellor {
     function _getCurrentValue(bytes32 _queryId)
         internal
         view
-        returns (
-            bytes memory _value,
-            uint256 _timestampRetrieved
-        )
+        returns (bytes memory _value, uint256 _timestampRetrieved)
     {
         uint256 _count = getNewValueCountbyQueryId(_queryId);
 
