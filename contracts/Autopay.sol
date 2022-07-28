@@ -8,13 +8,11 @@ pragma solidity 0.8.3;
  * specific time intervals, as well as one time tips.
 */
 
-import "usingtellor/contracts/UsingTellor.sol";
+import "./usingtellor/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
-import "./interfaces/ITellorFlex.sol";
 
 contract Autopay is UsingTellor {
     // Storage
-    ITellor public master; // Tellor contract address
     IERC20 public token; // TRB token address
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
@@ -93,7 +91,6 @@ contract Autopay is UsingTellor {
         address _token,
         uint256 _fee
     ) UsingTellor(_tellor) {
-        master = ITellor(_tellor);
         token = IERC20(_token);
         fee = _fee;
     }
@@ -122,10 +119,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        token.approve(address(master), (_cumulativeReward * fee) / 1000);
-        ITellorFlex(address(master)).addStakingRewards(
-            (_cumulativeReward * fee) / 1000
-        );
+        token.approve(address(tellor), (_cumulativeReward * fee) / 1000);
+        tellor.addStakingRewards((_cumulativeReward * fee) / 1000);
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -163,8 +158,7 @@ contract Autopay is UsingTellor {
                 "buffer time has not passed"
             );
             require(
-                master.getReporterByTimestamp(_queryId, _timestamps[_i]) ==
-                    msg.sender,
+                getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
             _cumulativeReward += _getRewardAmount(
@@ -206,10 +200,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        token.approve(address(master), (_cumulativeReward * fee) / 1000);
-        ITellorFlex(address(master)).addStakingRewards(
-            (_cumulativeReward * fee) / 1000
-        );
+        token.approve(address(tellor), (_cumulativeReward * fee) / 1000);
+        tellor.addStakingRewards((_cumulativeReward * fee) / 1000);
         emit TipClaimed(_feedId, _queryId, _cumulativeReward, msg.sender);
     }
 
@@ -314,7 +306,7 @@ contract Autopay is UsingTellor {
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp));
         } else {
-            (, , uint256 _timestampRetrieved) = getCurrentValue(_queryId);
+            (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
             if (_timestampRetrieved < _tips[_tips.length - 1].timestamp) {
                 _tips[_tips.length - 1].timestamp = block.timestamp;
                 _tips[_tips.length - 1].amount += _amount;
@@ -357,7 +349,7 @@ contract Autopay is UsingTellor {
      * @return amount of tip
      */
     function getCurrentTip(bytes32 _queryId) public view returns (uint256) {
-        (, , uint256 _timestampRetrieved) = getCurrentValue(_queryId);
+        (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
         Tip memory _lastTip = tips[_queryId][tips[_queryId].length - 1];
         if (_timestampRetrieved < _lastTip.timestamp) {
             return _lastTip.amount;
@@ -526,7 +518,7 @@ contract Autopay is UsingTellor {
             "buffer time has not passed"
         );
         require(
-            msg.sender == master.getReporterByTimestamp(_queryId, _timestamp),
+            msg.sender == getReporterByTimestamp(_queryId, _timestamp),
             "message sender not reporter for given queryId and timestamp"
         );
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
@@ -545,7 +537,7 @@ contract Autopay is UsingTellor {
                 _min = _mid;
             }
         }
-        (, , uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
+        (, uint256 _timestampBefore) = getDataBefore(_queryId, _timestamp);
         require(
             _timestampBefore < _tips[_min].timestamp,
             "tip earned by previous submission"
@@ -558,6 +550,31 @@ contract Autopay is UsingTellor {
         _tipAmount = _tips[_min].amount;
         _tips[_min].amount = 0;
         return _tipAmount;
+    }
+
+    /**
+     * @dev Allows the user to get the latest value for the queryId specified
+     * @param _queryId is the id to look up the value for
+     * @return _value the value retrieved
+     * @return _timestampRetrieved the retrieved value's timestamp
+     */
+    function _getCurrentValue(bytes32 _queryId)
+        internal
+        view
+        returns (bytes memory _value, uint256 _timestampRetrieved)
+    {
+        uint256 _count = getNewValueCountbyQueryId(_queryId);
+
+        if (_count == 0) {
+            return (bytes(""), 0);
+        }
+        uint256 _time = getTimestampbyQueryIdandIndex(_queryId, _count - 1);
+        _value = retrieveData(_queryId, _time);
+        if (_value.length > 0) {
+            return (_value, _time);
+        } else {
+            return (bytes(""), _time);
+        }
     }
 
     /**
@@ -584,7 +601,6 @@ contract Autopay is UsingTellor {
         bytes memory _valueRetrieved = retrieveData(_queryId, _timestamp);
         require(_valueRetrieved.length != 0, "no value exists at timestamp");
         (
-            ,
             bytes memory _valueRetrievedBefore,
             uint256 _timestampBefore
         ) = getDataBefore(_queryId, _timestamp);

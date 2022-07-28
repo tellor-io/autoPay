@@ -48,7 +48,7 @@ describe("Autopay - function tests", () => {
   });
 
   it("constructor", async () => {
-    expect(await autopay.master()).to.equal(tellor.address);
+    expect(await autopay.tellor()).to.equal(tellor.address);
     expect(await autopay.token()).to.equal(tellor.address);
     expect(await autopay.fee()).to.equal(10)
   });
