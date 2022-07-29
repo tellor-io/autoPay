@@ -105,7 +105,7 @@ describe("Autopay - e2e tests", function() {
     blockyArray2 = new Array()
     // setup data feed queryId 1
     blocky = await h.getBlock()
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0, '0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0, '0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0])
     feedId = feedId = ethers.utils.keccak256(feedBytes)
     await tellor.approve(autopay.address, h.toWei("1000"));
@@ -201,19 +201,19 @@ describe("Autopay - e2e tests", function() {
     await tellor.approve(autopay.address, h.toWei("10000000000"));
     blocky = await h.getBlock()
     // setup data feed queryId 1
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0, '0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0, '0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0])
     feedId1 = ethers.utils.keccak256(feedBytes)
     // fund feed 1
     await autopay.fundFeed(feedId1, QUERYID1, h.toWei("100"));
     // setup data feed queryId 2
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID2, reward2, blocky.timestamp, interval2, window2, 0, 0, '0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID2, reward2, blocky.timestamp, interval2, window2, 0, 0, '0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, reward2, blocky.timestamp, interval2,window2, 0, 0])
     feedId2 = ethers.utils.keccak256(feedBytes)
     // fund feed 2
     await autopay.fundFeed(feedId2, QUERYID2, h.toWei("100"));
     // setup data feed queryId 3
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID3, reward3, blocky.timestamp, interval3, window3, 0, 0, '0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID3, reward3, blocky.timestamp, interval3, window3, 0, 0, '0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, reward3, blocky.timestamp, interval3, window3, 0, 0])
     feedId3 = ethers.utils.keccak256(feedBytes)
     // fund feed 3
@@ -325,19 +325,19 @@ describe("Autopay - e2e tests", function() {
     await tellor.approve(autopay.address, h.toWei("10000000000"));
     blocky = await h.getBlock()
     // setup data feed queryId 1
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0,'0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID1, reward1, blocky.timestamp, interval1, window1, 0, 0,'0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, reward1, blocky.timestamp, interval1,window1, 0, 0])
     feedId1 = ethers.utils.keccak256(feedBytes)
     // fund feed 1
     await autopay.fundFeed(feedId1, QUERYID1, h.toWei("2"));
     // setup data feed queryId 2
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID2, reward2, blocky.timestamp + interval1, interval2, window2, 0, 0, '0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID2, reward2, blocky.timestamp + interval1, interval2, window2, 0, 0, '0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID2, reward2, blocky.timestamp + interval1, interval2, window2, 0, 0])
     feedId2 = ethers.utils.keccak256(feedBytes)
     // fund feed 2
     await autopay.fundFeed(feedId2, QUERYID2, h.toWei("100"));
     // setup data feed queryId 3
-    await autopay.connect(accounts[1]).setupDataFeed(QUERYID3, reward3, blocky.timestamp + interval1 + interval1, interval3, window3, 0, 0, '0x');
+    await autopay.connect(accounts[1]).setupDataFeed(QUERYID3, reward3, blocky.timestamp + interval1 + interval1, interval3, window3, 0, 0, '0x',0);
     feedBytes = abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID3, reward3, blocky.timestamp + interval1 + interval1, interval3, window3, 0, 0])
     feedId3 = ethers.utils.keccak256(feedBytes)
     // fund feed 3
@@ -491,7 +491,7 @@ describe("Autopay - e2e tests", function() {
 
   it("priceChange tests", async function() {
     let firstBlocky = await h.getBlock();
-    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,86400,600,500,0,"0x");
+    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,86400,600,500,0,"0x",0);
     feedId1= ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,86400,600,500,0]));
     await tellor.approve(autopay.address, h.toWei("1000"));
     await autopay.fundFeed(feedId1, QUERYID1, h.toWei("1000"));
@@ -532,7 +532,7 @@ describe("Autopay - e2e tests", function() {
 
   it("more priceChange tests", async function() {
     let firstBlocky = await h.getBlock();
-    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500, 0, "0x");
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500, 0, "0x",0);
     feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500, 0]));
     await tellor.approve(autopay.address, h.toWei("1000"));
     await autopay.fundFeed(feedId1, QUERYID1, h.toWei("1000"));
@@ -586,7 +586,7 @@ describe("Autopay - e2e tests", function() {
 
     blocky = await h.getBlock()
     await tellor.approve(autopay.address,h.toWei("1000"))
-    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0,"0x")
+    await autopay.setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0,"0x",0)
     bytesId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),blocky.timestamp,3600,600,0,0]))
 
     for(i=1; i<6; i++) {
@@ -602,7 +602,7 @@ describe("Autopay - e2e tests", function() {
     await tellor.faucet(accounts[2].address)
     await tellor.connect(accounts[2]).approve(autopay.address, h.toWei("1000"))
     feedId = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, INTERVAL, 600, 0, h.toWei("1")]));
-    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, h.toWei("1"), "0x");
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, h.toWei("1"), "0x",0);
     await autopay.connect(accounts[2]).fundFeed(feedId, QUERYID1, h.toWei("1000"));
 
     // advance some time within window
@@ -670,4 +670,37 @@ describe("Autopay - e2e tests", function() {
   //   await h.advanceTime(3600 * 24 * 7 * 12)
   //   result = await autopay._getRewardAmount(feedId, QUERYID1, blocky1.timestamp)
   // })
+
+
+  it("test dispute on value", async function() {
+    let firstBlocky = await h.getBlock();
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500, 0, "0x",0);
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), firstBlocky.timestamp, 3600, 600, 500, 0]));
+    await tellor.approve(autopay.address, h.toWei("100"));
+    await autopay.tip(QUERYID1, h.toWei("100"),'0x')
+    assert(await autopay.getCurrentTip(QUERYID1) == h.toWei("100"))
+    // up threshold
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    firstBlocky = await h.getBlock();
+    await tellor.approve(autopay.address, h.toWei("100"));
+    await autopay.tip(QUERYID1, h.toWei("100"),'0x')
+    assert(await autopay.getCurrentTip(QUERYID1) == h.toWei("100"))
+    await tellor.beginDispute(QUERYID1,firstBlocky.timestamp)
+    await tellor.approve(autopay.address, h.toWei("100"));
+    await autopay.tip(QUERYID1, h.toWei("100"),'0x')
+        //now it should add to previous
+    assert(await autopay.getCurrentTip(QUERYID1) == h.toWei("200"), "current tip should be double")
+    await tellor.connect(accounts[3]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    let firstBlocky2 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+    //acount 2 fails to get one time tip
+    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(QUERYID1, [firstBlocky.timestamp]))
+    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(QUERYID1, [firstBlocky2.timestamp]))
+    //account 3 gets all the one time tips
+    let bal1 = await tellor.balanceOf(accounts[3].address)
+    await autopay.connect(accounts[3]).claimOneTimeTip(QUERYID1, [firstBlocky.timestamp,firstBlocky2.timestamp])
+    let bal2 = await tellor.balanceOf(accounts[3].address)
+    console.log(bal2,bal1)
+    assert(bal2 - bal1 == h.toWei("297"), "payout should be correct");
+  })
 });
