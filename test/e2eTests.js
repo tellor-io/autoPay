@@ -21,7 +21,7 @@ describe("Autopay - e2e tests", function() {
     tellor = await TellorPlayground.deploy();
     await tellor.deployed();
     await tellor.faucet(accounts[0].address);
-    const Autopay = await ethers.getContractFactory("Autopay");
+    const Autopay = await ethers.getContractFactory("AutopayMock");
     autopay = await Autopay.deploy(tellor.address, tellor.address, FEE);
     await autopay.deployed();
   });
@@ -527,7 +527,7 @@ describe("Autopay - e2e tests", function() {
     await tellor.connect(accounts[2]).submitValue(QUERYID1,bytesData, 0, "0x");
     firstBlocky = await h.getBlock();
     await h.advanceTime(86400/2)
-    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp])
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [firstBlocky.timestamp]))
   });
 
   it("more priceChange tests", async function() {
@@ -677,7 +677,6 @@ describe("Autopay - e2e tests", function() {
     let bal1 = await tellor.balanceOf(accounts[3].address)
     await autopay.connect(accounts[3]).claimOneTimeTip(QUERYID1, [firstBlocky.timestamp,firstBlocky2.timestamp])
     let bal2 = await tellor.balanceOf(accounts[3].address)
-    console.log(bal2,bal1)
     assert(bal2 - bal1 == h.toWei("297"), "payout should be correct");
   })
 

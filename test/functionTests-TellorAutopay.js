@@ -20,7 +20,7 @@ describe("Autopay - function tests", () => {
     tellor = await TellorPlayground.deploy();
     await tellor.deployed();
     for(i=0; i<2; i++){await tellor.faucet(accounts[0].address);}
-    const Autopay = await ethers.getContractFactory("Autopay");
+    const Autopay = await ethers.getContractFactory("AutopayMock");
     autopay = await Autopay.deploy(tellor.address, tellor.address, FEE);
     await autopay.deployed();
     firstBlocky = await h.getBlock();
@@ -556,5 +556,24 @@ describe("Autopay - function tests", () => {
     // query after 12 weeks
     await h.advanceTime(86400 * 7 * 12)
     await h.expectThrow(autopay.getRewardAmount(feedId, QUERYID1, [blocky1.timestamp, blocky2.timestamp, blocky3.timestamp]))
+  })
+  it("bytesToUint", async() => {
+    let val1 = h.uintTob32(1)
+    let val2 = h.uintTob32(2)
+    let val3 = h.uintTob32(300000000000000)
+    let val4 = h.uintTob32(300000000000001)
+    let val5 = abiCoder.encode(["uint256"], [1])
+    let val6 = abiCoder.encode(["uint256"], ["21010191828172717718232237237237128"])
+    let val7 = '0x01'
+    let val8 = '0x10'
+
+    expect(await autopay.bytesToUint(val1)).to.equal(1)
+    expect(await autopay.bytesToUint(val2)).to.equal(2)
+    expect(await autopay.bytesToUint(val3)).to.equal(300000000000000)
+    expect(await autopay.bytesToUint(val4)).to.equal(300000000000001)
+    expect(await autopay.bytesToUint(val5)).to.equal(1)
+    expect(await autopay.bytesToUint(val6)).to.equal("21010191828172717718232237237237128")
+    expect(await autopay.bytesToUint(val7)).to.equal(1)
+    expect(await autopay.bytesToUint(val8)).to.equal(16)
   })
 });

@@ -482,7 +482,7 @@ contract Autopay is UsingTellor {
      */
     function _bytesToUint(bytes memory _b) internal pure returns(uint256 _number){
         for (uint256 _i = 0; _i < _b.length; _i++) {
-            _number = _number + uint8(_b[_i]);
+            _number = _number * 256 + uint8(_b[_i]);
         }
     }
 
