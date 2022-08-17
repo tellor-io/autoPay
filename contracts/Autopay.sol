@@ -528,7 +528,7 @@ contract Autopay is UsingTellor {
             "tip earned by previous submission"
         );
         require(
-            _timestamp > _tips[_min].timestamp,
+            _timestamp >= _tips[_min].timestamp,
             "timestamp not eligible for tip"
         );
         require(_tips[_min].amount > 0, "tip already claimed");
