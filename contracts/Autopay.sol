@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.3;
 
-import "./usingtellor/UsingTellor.sol";
+import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "hardhat/console.sol";
 
