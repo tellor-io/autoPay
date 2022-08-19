@@ -704,4 +704,38 @@ describe("Autopay - e2e tests", function() {
     expect(await tellor.balanceOf(tipAndReport.address)).to.equal(expectedBalance);
     expect(await tellor.balanceOf(autopay.address)).to.equal(0);
   })
+
+  it.only("test no claimTips to pay out", async function() {
+    let blocky0 = await h.getBlock();
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, 0, "0x",0);
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, 0]));
+    // submit a value, eligible for autopay reward but no balance to pay out
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    let blocky1 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+    // claim reward with zero balance
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky1.timestamp]))
+    // claim reward with balance but report not eligibe 
+    await tellor.faucet(accounts[0].address)
+    await tellor.approve(autopay.address, h.toWei("100"));
+    await autopay.fundFeed(feedId1, QUERYID1, h.toWei("100"));
+    await h.advanceTime(3600 / 2)
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    let blocky2 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky2.timestamp]))
+
+  })
 });
+
+//   function setupDataFeed(
+//     bytes32 _queryId,
+//     uint256 _reward,
+//     uint256 _startTime,
+//     uint256 _interval,
+//     uint256 _window,
+//     uint256 _priceThreshold,
+//     uint256 _rewardIncreasePerSecond,
+//     bytes calldata _queryData,
+//     uint256 _amount
+// ) external {

@@ -146,6 +146,10 @@ contract Autopay is UsingTellor {
         uint256 _cumulativeReward;
         Feed storage _feed = dataFeed[_queryId][_feedId];
         uint256 _balance = _feed.details.balance;
+        require(
+            _balance > 0,
+            "no funds available for this feed"
+        );
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             require(
                 block.timestamp - _timestamps[_i] > 12 hours,
