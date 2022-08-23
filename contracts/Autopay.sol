@@ -15,6 +15,7 @@ contract Autopay is UsingTellor {
     // Storage
     IERC20 public token; // TRB token address
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
+    uint256 public reportingLock; // oracle reporting lock
 
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryId to dataFeedIds array
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryId to dataFeedId to details
@@ -46,6 +47,7 @@ contract Autopay is UsingTellor {
     struct Tip {
         uint256 amount;
         uint256 timestamp;
+        uint256 cumulativeTips;
     }
 
     // Events
@@ -93,6 +95,7 @@ contract Autopay is UsingTellor {
     ) UsingTellor(_tellor) {
         token = IERC20(_token);
         fee = _fee;
+        reportingLock = tellor.reportingLock();
     }
 
     /**
@@ -100,13 +103,20 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
-    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps)external{
+    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps) external{
         require(tips[_queryId].length > 0,"no tips submitted for this queryId");
-        uint256 _reward;
         uint256 _cumulativeReward;
+        uint256 _thisReward;
+        uint256 _extraReward; // tip above stakeAmount cap
+        uint256 _stakeAmount = tellor.stakeAmount();
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            (_reward) = _claimOneTimeTip(_queryId, _timestamps[_i]);
-            _cumulativeReward += _reward;
+            _thisReward = _getOneTimeTipAmount(_queryId, _timestamps[_i]);
+            if(_thisReward > _stakeAmount) {
+                _cumulativeReward += _stakeAmount;
+                _extraReward += _thisReward - _stakeAmount;
+            } else {
+                _cumulativeReward += _thisReward;
+            }
         }
         require(
             token.transfer(
@@ -114,8 +124,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        token.approve(address(tellor), (_cumulativeReward * fee) / 1000);
-        tellor.addStakingRewards((_cumulativeReward * fee) / 1000);
+        token.approve(address(tellor), (_cumulativeReward * fee) / 1000 + _extraReward);
+        tellor.addStakingRewards((_cumulativeReward * fee) / 1000 + _extraReward);
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -143,13 +153,15 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         uint256[] calldata _timestamps
     ) external {
-        uint256 _cumulativeReward;
         Feed storage _feed = dataFeed[_queryId][_feedId];
         uint256 _balance = _feed.details.balance;
         require(
             _balance > 0,
             "no funds available for this feed"
         );
+        uint256 _stakeAmount = tellor.stakeAmount();
+        uint256 _cumulativeReward;
+        uint256 _thisReward;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             require(
                 block.timestamp - _timestamps[_i] > 12 hours,
@@ -159,11 +171,16 @@ contract Autopay is UsingTellor {
                 getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
-            _cumulativeReward += _getRewardAmount(
+            _thisReward = _getRewardAmount(
                 _feedId,
                 _queryId,
                 _timestamps[_i]
             );
+            if(_thisReward > _stakeAmount) {
+                _cumulativeReward += _stakeAmount;
+            } else {
+                _cumulativeReward += _thisReward;
+            }
             if (_cumulativeReward >= _balance) {
                 // Balance runs out
                 require(
@@ -309,14 +326,15 @@ contract Autopay is UsingTellor {
         require(_amount > 0, "tip must be greater than zero");
         Tip[] storage _tips = tips[_queryId];
         if (_tips.length == 0) {
-            _tips.push(Tip(_amount, block.timestamp));
+            _tips.push(Tip(_amount, block.timestamp, _amount));
         } else {
             (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
             if (_timestampRetrieved < _tips[_tips.length - 1].timestamp) {
                 _tips[_tips.length - 1].timestamp = block.timestamp;
                 _tips[_tips.length - 1].amount += _amount;
+                _tips[_tips.length - 1].cumulativeTips += _amount;
             } else {
-                _tips.push(Tip(_amount, block.timestamp));
+                _tips.push(Tip(_amount, block.timestamp, _tips[_tips.length - 1].cumulativeTips + _amount));
             }
         }
         if (
@@ -441,12 +459,19 @@ contract Autopay is UsingTellor {
         uint256[] calldata _timestamps
     ) external view returns (uint256 _cumulativeReward) {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
+        uint256 _thisReward;
+        uint256 _stakeAmount = tellor.stakeAmount();
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _cumulativeReward += _getRewardAmount(
+            _thisReward = _getRewardAmount(
                 _feedId,
                 _queryId,
                 _timestamps[_i]
             );
+            if (_thisReward > _stakeAmount){
+                _cumulativeReward += _stakeAmount;
+            } else {
+                _cumulativeReward += _thisReward;
+            }
         }
         if (_cumulativeReward > _feed.balance) {
             _cumulativeReward = _feed.balance;
@@ -496,25 +521,17 @@ contract Autopay is UsingTellor {
      * @param _timestamp timestamp of one time tip
      * @return _tipAmount of tip
      */
-    function _claimOneTimeTip(bytes32 _queryId, uint256 _timestamp)
+    function _getOneTimeTipAmount(bytes32 _queryId, uint256 _timestamp)
         internal
         returns (uint256 _tipAmount)
     {
-        Tip[] storage _tips = tips[_queryId];
         require(
             block.timestamp - _timestamp > 12 hours,
             "buffer time has not passed"
         );
-        if(isInDispute(_queryId, _timestamp)){
-            (,uint256 _timestampAfter) = getDataAfter(_queryId, _timestamp+1);
-            require(msg.sender == getReporterByTimestamp(_queryId, _timestampAfter), 
-            "must be next reporter");
-        } else{
-            require(
-                msg.sender == getReporterByTimestamp(_queryId, _timestamp),
-                "no value exists at timestamp"
-            );
-        }
+        require(!isInDispute(_queryId, _timestamp), "value disputed");
+        require(msg.sender == getReporterByTimestamp(_queryId, _timestamp), "msg sender must be reporter address");
+        Tip[] storage _tips = tips[_queryId];
         uint256 _min = 0;
         uint256 _max = _tips.length;
         uint256 _mid;
@@ -538,6 +555,31 @@ contract Autopay is UsingTellor {
         require(_tips[_min].amount > 0, "tip already claimed");
         _tipAmount = _tips[_min].amount;
         _tips[_min].amount = 0;
+        uint256 _minBackup = _min;
+        // check whether eligible for previous tips in array due to disputes
+        (,uint256 _indexNow) = getIndexForDataBefore(_queryId, _timestamp + 1);
+        (bool _found, uint256 _indexBefore) = getIndexForDataBefore(_queryId, _timestampBefore + 1);
+        if (_indexNow - _indexBefore > 1 || !_found) {
+            if(!_found) {
+                _tipAmount = _tips[_minBackup].cumulativeTips;
+            } else {
+                _max = _min;
+                _min = 0;
+                _mid;
+                while (_max - _min > 1) {
+                    _mid = (_max + _min) / 2;
+                    if (_tips[_mid].timestamp > _timestampBefore) {
+                        _max = _mid;
+                    } else {
+                        _min = _mid;
+                    }
+                }
+                _min++;
+                if(_min < _minBackup) {
+                    _tipAmount = _tips[_minBackup].cumulativeTips - _tips[_min].cumulativeTips + _tips[_min].amount;
+                }
+            }
+        }
     }
 
     /**
