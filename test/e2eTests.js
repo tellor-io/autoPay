@@ -761,6 +761,34 @@ describe("Autopay - e2e tests", function() {
   })
 
   it("cap rewards at stakeAmount", async function() {
+    // cap one time tip at stakeAmount
+    await tellor.approve(autopay.address, h.toWei("200"))
+    await autopay.tip(QUERYID1, h.toWei("200"),'0x')
+    await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky1 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+    await autopay.connect(accounts[1]).claimOneTimeTip(QUERYID1, [blocky1.timestamp])
+    expectedBal = h.toWei((100 * (1000 - FEE) / 1000).toString())
+    expect(await tellor.balanceOf(accounts[1].address)).to.equal(expectedBal)
+    expectedBalanceTellor = h.toWei((100 * FEE / 1000 + 100).toString())
+    expect(await tellor.balanceOf(tellor.address)).to.equal(expectedBalanceTellor)
 
+    // cap autopay reward at stakeAmount
+    await tellor.approve(autopay.address, h.toWei("500"))
+    let blocky2 = await h.getBlock();
+    await autopay.setupDataFeed(QUERYID1, h.toWei("200"), blocky1.timestamp, 3600, 600, 0, 0, "0x", h.toWei("500"));
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("200"), blocky1.timestamp, 3600, 600, 0, 0]));
+    
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(101), 0, "0x");
+    blocky3 = await h.getBlock();
+    await h.advanceTime(3600)
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(102), 0, "0x");
+    blocky4 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky3.timestamp, blocky4.timestamp])
+    expectedBal = h.toWei((200 * (1000 - FEE) / 1000).toString())
+    expect(await tellor.balanceOf(accounts[2].address)).to.equal(expectedBal)
+    expectedTellorReward = h.toWei((200 * FEE / 1000).toString())
+    expect(await tellor.balanceOf(tellor.address)).to.equal(BigInt(expectedTellorReward) + BigInt(expectedBalanceTellor))
   })
 });
