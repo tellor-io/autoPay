@@ -130,7 +130,7 @@ describe("Autopay - function tests", () => {
     // emit DataFeedFunded(_feedId,_queryId,_amount,_feedFunder);
     await tellor.approve(autopay.address, h.toWei("100"));
     let initBal = await tellor.balanceOf(autopay.address)
-    await expect(autopay.fundFeed(bytesId, QUERYID1, h.toWei("10"))).to.emit(autopay, "DataFeedFunded").withArgs(bytesId, QUERYID1, h.toWei("10"), accounts[0].address);
+    await expect(autopay.fundFeed(bytesId, QUERYID1, h.toWei("10"))).to.emit(autopay, "DataFeedFunded").withArgs(bytesId, QUERYID1, h.toWei("10"), accounts[0].address, [web3.utils.toWei("1"), h.toWei("1010"), firstBlocky.timestamp, 3600, 600, 0, 0, 1]);
     expect(await tellor.balanceOf(autopay.address) - initBal == h.toWei("10"), "balance should change")
   });
   

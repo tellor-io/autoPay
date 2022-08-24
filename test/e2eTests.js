@@ -764,14 +764,3 @@ describe("Autopay - e2e tests", function() {
 
   })
 });
-
-// function setupDataFeed(
-//   bytes32 _queryId,
-//   uint256 _reward,
-//   uint256 _startTime,
-//   uint256 _interval,
-//   uint256 _window,
-//   uint256 _priceThreshold,
-//   uint256 _rewardIncreasePerSecond,
-//   bytes calldata _queryData,
-//   uint256 _amount

@@ -55,7 +55,8 @@ contract Autopay is UsingTellor {
         bytes32 _queryId,
         bytes32 _feedId,
         uint256 _amount,
-        address _feedFunder
+        address _feedFunder,
+        FeedDetails _feedDetails
     );
     event NewDataFeed(
         bytes32 _queryId,
@@ -245,7 +246,7 @@ contract Autopay is UsingTellor {
             _feed.feedsWithFundingIndex = feedsWithFunding.length;
         }
         userTipsTotal[msg.sender] += _amount;
-        emit DataFeedFunded(_feedId, _queryId, _amount, msg.sender);
+        emit DataFeedFunded(_feedId, _queryId, _amount, msg.sender, _feed);
     }
 
     /**
