@@ -650,11 +650,8 @@ describe("Autopay - e2e tests", function() {
   })
 
   it("test dispute on value", async function() {
+    // test one time tips
     await tellor.approve(autopay.address, h.toWei("200"))
-    let blocky0 = await h.getBlock();
-    // await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 500, 0, "0x",h.toWei("100"));
-    // feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 500, 0]));
-    
     await autopay.tip(QUERYID1, h.toWei("25"),'0x')
     assert(await autopay.getCurrentTip(QUERYID1) == h.toWei("25"))
 
@@ -684,10 +681,34 @@ describe("Autopay - e2e tests", function() {
     await autopay.connect(accounts[3]).claimOneTimeTip(QUERYID1, [blocky2.timestamp])
     let bal2 = await tellor.balanceOf(accounts[3].address)
     expectedReward = h.toWei((75 * (1000 - FEE) / 1000).toString())
-    console.log("expectedReward: " + expectedReward)
-    console.log("balDiff       : " + (bal2 - bal1))
-    assert(bal2 - bal1 == expectedReward, "payout should be correct")
+    assert(bal2 - bal1 == expectedReward, "one time tip payout should be correct")
 
+    // test autopay tips
+    await tellor.approve(autopay.address, h.toWei("100"))
+    let blocky3 = await h.getBlock();
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky3.timestamp, 3600, 600, 0, 0, "0x",h.toWei("100"));
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky3.timestamp, 3600, 600, 0, 0]));
+
+    await tellor.connect(accounts[4]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky4 = await h.getBlock();
+    await tellor.beginDispute(QUERYID1,blocky4.timestamp)
+
+    await tellor.connect(accounts[5]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky5 = await h.getBlock();
+    await tellor.beginDispute(QUERYID1,blocky5.timestamp)
+
+    await tellor.connect(accounts[6]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky6 = await h.getBlock();
+
+    await h.advanceTime(3600 * 12)
+
+    await h.expectThrow(autopay.connect(accounts[4]).claimTip(feedId1, QUERYID1, [blocky4.timestamp]))
+    await h.expectThrow(autopay.connect(accounts[5]).claimTip(feedId1, QUERYID1, [blocky5.timestamp]))
+    await autopay.connect(accounts[6]).claimTip(feedId1, QUERYID1, [blocky6.timestamp])
+    console.log(await tellor.balanceOf(accounts[6].address))
+    expectedReward = h.toWei((1 * (1000 - FEE) / 1000).toString())
+    assert(await tellor.balanceOf(accounts[6].address) == expectedReward, "autopay payout should be correct")
+    
   })
 
   it("one time tip same block as report", async function() {
