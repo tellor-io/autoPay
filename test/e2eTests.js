@@ -705,7 +705,6 @@ describe("Autopay - e2e tests", function() {
     await h.expectThrow(autopay.connect(accounts[4]).claimTip(feedId1, QUERYID1, [blocky4.timestamp]))
     await h.expectThrow(autopay.connect(accounts[5]).claimTip(feedId1, QUERYID1, [blocky5.timestamp]))
     await autopay.connect(accounts[6]).claimTip(feedId1, QUERYID1, [blocky6.timestamp])
-    console.log(await tellor.balanceOf(accounts[6].address))
     expectedReward = h.toWei((1 * (1000 - FEE) / 1000).toString())
     assert(await tellor.balanceOf(accounts[6].address) == expectedReward, "autopay payout should be correct")
     
@@ -775,7 +774,6 @@ describe("Autopay - e2e tests", function() {
     await h.expectThrow(autopay.connect(accounts[1]).claimOneTimeTip(QUERYID1, [blocky1.timestamp]))
     await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(QUERYID1, [blocky2.timestamp]))
     await autopay.connect(accounts[3]).claimOneTimeTip(QUERYID1, [blocky3.timestamp])
-    console.log("bal: " + await tellor.balanceOf(accounts[3].address))
     reporterBal = await tellor.balanceOf(accounts[3].address)
     expectedBal = h.toWei((31 * (1000 - FEE) / 1000).toString())
     expect(reporterBal).to.equal(expectedBal)

@@ -15,7 +15,6 @@ contract Autopay is UsingTellor {
     // Storage
     IERC20 public token; // TRB token address
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
-    uint256 public reportingLock; // oracle reporting lock
 
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryId to dataFeedIds array
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryId to dataFeedId to details
@@ -52,15 +51,15 @@ contract Autopay is UsingTellor {
 
     // Events
     event DataFeedFunded(
-        bytes32 _queryId,
-        bytes32 _feedId,
+        bytes32 indexed _queryId,
+        bytes32 indexed _feedId,
         uint256 _amount,
         address _feedFunder,
         FeedDetails _feedDetails
     );
     event NewDataFeed(
-        bytes32 _queryId,
-        bytes32 _feedId,
+        bytes32 indexed _queryId,
+        bytes32 indexed _feedId,
         bytes _queryData,
         address _feedCreator
     );
@@ -96,7 +95,6 @@ contract Autopay is UsingTellor {
     ) UsingTellor(_tellor) {
         token = IERC20(_token);
         fee = _fee;
-        reportingLock = tellor.reportingLock();
     }
 
     /**
