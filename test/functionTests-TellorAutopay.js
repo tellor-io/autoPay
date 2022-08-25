@@ -143,8 +143,11 @@ describe("Autopay - function tests", () => {
     await h.expectThrow(autopay.setupDataFeed(QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,0,0,"0x",0));//reward is zero
     await h.expectThrow(autopay.setupDataFeed(QUERYID1,h.toWei("1"),blocky.timestamp,600,600,0,0,"0x",0));//already set up
     await h.expectThrow(autopay.setupDataFeed(QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,0,0,"0x",0));//interval > window
+    // first, simulate call with callStatic to retrieve feedId returned by setupDataFeed
+    feedIdRetrieved = await autopay.callStatic.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3,"0x",0);
     await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3,"0x",0);
     feedId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3]));
+    assert(feedId == feedIdRetrieved, "setupDataFeed should return the feedId");
     let result = await autopay.getDataFeed(feedId);
     expect(result.reward).to.equal(h.toWei("1"))
     expect(result.balance).to.equal(0);

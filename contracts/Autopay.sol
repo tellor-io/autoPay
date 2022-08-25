@@ -274,12 +274,12 @@ contract Autopay is UsingTellor {
         uint256 _rewardIncreasePerSecond,
         bytes calldata _queryData,
         uint256 _amount
-    ) external {
+    ) external returns(bytes32 _feedId) {
         require(
             _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
             "id must be hash of bytes data"
         );
-        bytes32 _feedId = keccak256(
+        _feedId = keccak256(
             abi.encode(
                 _queryId,
                 _reward,
@@ -311,6 +311,7 @@ contract Autopay is UsingTellor {
         if(_amount > 0){
             fundFeed(_feedId,_queryId,_amount);
         }
+        return _feedId;
     }
 
     /**
