@@ -3,6 +3,7 @@ pragma solidity 0.8.3;
 
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
+import "./interfaces/IQueryDataStorage.sol";
 import "hardhat/console.sol";
 
 /**
@@ -14,6 +15,7 @@ import "hardhat/console.sol";
 contract Autopay is UsingTellor {
     // Storage
     IERC20 public token; // TRB token address
+    IQueryDataStorage public queryDataStorage; // Query data storage contract
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
 
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryId to dataFeedIds array
@@ -86,14 +88,17 @@ contract Autopay is UsingTellor {
      * @dev Initializes system parameters
      * @param _tellor address of Tellor contract
      * @param _token address of token used for tips
+     * @param _queryDataStorage address of query data storage contract
      * @param _fee percentage, 1000 is 100%, 50 is 5%, etc.
      */
     constructor(
         address payable _tellor,
         address _token,
+        address _queryDataStorage,
         uint256 _fee
     ) UsingTellor(_tellor) {
         token = IERC20(_token);
+        queryDataStorage = IQueryDataStorage(_queryDataStorage);
         fee = _fee;
     }
 
@@ -301,6 +306,7 @@ contract Autopay is UsingTellor {
         _feed.rewardIncreasePerSecond = _rewardIncreasePerSecond;
         currentFeeds[_queryId].push(_feedId);
         queryIdFromDataFeedId[_feedId] = _queryId;
+        queryDataStorage.storeData(_queryData);
         emit NewDataFeed(_queryId, _feedId, _queryData, msg.sender);
         if(_amount > 0){
             fundFeed(_feedId,_queryId,_amount);
@@ -326,6 +332,7 @@ contract Autopay is UsingTellor {
         Tip[] storage _tips = tips[_queryId];
         if (_tips.length == 0) {
             _tips.push(Tip(_amount, block.timestamp, _amount));
+            queryDataStorage.storeData(_queryData);
         } else {
             (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
             if (_timestampRetrieved < _tips[_tips.length - 1].timestamp) {
@@ -367,6 +374,7 @@ contract Autopay is UsingTellor {
      * @return amount of tip
      */
     function getCurrentTip(bytes32 _queryId) public view returns (uint256) {
+        // if no tips, return 0
         if(tips[_queryId].length == 0){
             return 0;
         }

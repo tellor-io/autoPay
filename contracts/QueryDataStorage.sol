@@ -15,7 +15,7 @@ contract QueryDataStorage {
      * @dev Stores query data in a mapping from queryId
      * @param _queryData The query data
      */
-    function storeData(bytes memory _queryData) public {
+    function storeData(bytes memory _queryData) external {
         bytes32 _queryId = keccak256(_queryData);
         if (queryData[_queryId].length == 0) {
             queryData[_queryId] = _queryData;

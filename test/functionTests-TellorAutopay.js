@@ -20,8 +20,11 @@ describe("Autopay - function tests", () => {
     tellor = await TellorPlayground.deploy();
     await tellor.deployed();
     for(i=0; i<2; i++){await tellor.faucet(accounts[0].address);}
+    const QueryDataStorage = await ethers.getContractFactory("QueryDataStorage");
+    queryDataStorage = await QueryDataStorage.deploy();
+    await queryDataStorage.deployed();
     const Autopay = await ethers.getContractFactory("AutopayMock");
-    autopay = await Autopay.deploy(tellor.address, tellor.address, FEE);
+    autopay = await Autopay.deploy(tellor.address, tellor.address, queryDataStorage.address, FEE);
     await autopay.deployed();
     firstBlocky = await h.getBlock();
     await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0,"0x",0);
