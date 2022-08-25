@@ -6,7 +6,7 @@ const { keccak256 } = require("@ethersproject/keccak256");
 require("chai").use(require("chai-as-promised")).should();
 
 describe("Autopay - function tests", () => {
-  let tellor,autopay,accounts,firstBlocky,blocky,dataFeedBefore,bytesId;
+  let tellor,autopay,accounts,firstBlocky,blocky,dataFeedBefore,bytesId,queryDataStorage;
   let array = [];
   let badArray = [];
   let abiCoder = new ethers.utils.AbiCoder();
@@ -53,6 +53,7 @@ describe("Autopay - function tests", () => {
   it("constructor", async () => {
     expect(await autopay.tellor()).to.equal(tellor.address);
     expect(await autopay.token()).to.equal(tellor.address);
+    expect(await autopay.queryDataStorage()).to.equal(queryDataStorage.address);
     expect(await autopay.fee()).to.equal(10)
   });
   
@@ -155,6 +156,19 @@ describe("Autopay - function tests", () => {
     expect(result.feedsWithFundingIndex).to.equal(0);
     await tellor.approve(autopay.address, h.toWei("100"));
     await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,7600,600,2,4,"0x",h.toWei("10"));
+
+    queryDataArgs = abiCoder.encode(["string", "string"], ["eth", "usd"]);
+    queryData = abiCoder.encode(["string", "bytes"], ["SpotPrice", queryDataArgs]);
+    queryId = keccak256(queryData);
+
+    await autopay.setupDataFeed(queryId,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3,queryData,0);
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+
+    // setup second feed for same query id
+    await autopay.setupDataFeed(queryId,h.toWei("1"),firstBlocky.timestamp,3600,1200,1,3,queryData,0);
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
   });
   it("getRewardClaimedStatus", async () => {
     let v =  array[0]
@@ -168,20 +182,32 @@ describe("Autopay - function tests", () => {
   it("tip", async () => {
     await tellor.faucet(accounts[0].address)
     await h.expectThrow(autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x'));
-    await tellor.approve(autopay.address,web3.utils.toWei("100"))
+    await tellor.approve(autopay.address,web3.utils.toWei("1000"))
     await h.expectThrow(autopay.tip(h.uintTob32(200),web3.utils.toWei("100"),'0x')) //must be hash
     await autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x')
     let res = await autopay.getCurrentTip(QUERYID1);
     assert(res == web3.utils.toWei("100"), "tip 1nshould be correct")
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(3550), 0, "0x");
-    await tellor.approve(autopay.address,web3.utils.toWei("200"))
     await autopay.tip(QUERYID1,web3.utils.toWei("200"),'0x')
     res = await autopay.getCurrentTip(QUERYID1);
     assert(res == web3.utils.toWei("200"), "tip 2 should be correct")
-    await tellor.approve(autopay.address,web3.utils.toWei("300"))
     await autopay.tip(QUERYID1,web3.utils.toWei("300"),'0x')
     res = await autopay.getCurrentTip(QUERYID1);
     assert(res == web3.utils.toWei("500"), "tip 3 should be correct")
+    // test query data storage
+    queryDataArgs = abiCoder.encode(["string", "string"], ["eth", "usd"]);
+    queryData = abiCoder.encode(["string", "bytes"], ["SpotPrice", queryDataArgs]);
+    queryId = keccak256(queryData);
+    await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+    await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+    await tellor.connect(accounts[2]).submitValue(queryId, h.uintTob32(3550), 0, queryData);
+    await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
   });
   it("claimOneTimeTip", async () => {
     let startBal = await tellor.balanceOf(accounts[2].address);

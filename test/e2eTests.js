@@ -2,12 +2,14 @@ const {expect,assert} = require("chai");
 const {ethers} = require("hardhat");
 const h = require("./helpers/helpers");
 const web3 = require("web3");
+const {keccak256} = require("@ethersproject/keccak256");
 
 require("chai").use(require("chai-as-promised")).should();
 
 describe("Autopay - e2e tests", function() {
   let tellor;
   let autopay;
+  let queryDataStorage;
   let accounts;
   const QUERYID1 = h.uintTob32(1);
   const QUERYID2 = h.uintTob32(2);
@@ -22,7 +24,7 @@ describe("Autopay - e2e tests", function() {
     await tellor.deployed();
     await tellor.faucet(accounts[0].address);
     const QueryDataStorage = await ethers.getContractFactory("QueryDataStorage");
-    const queryDataStorage = await QueryDataStorage.deploy();
+    queryDataStorage = await QueryDataStorage.deploy();
     await queryDataStorage.deployed();
     const Autopay = await ethers.getContractFactory("AutopayMock");
     autopay = await Autopay.deploy(tellor.address, tellor.address, queryDataStorage.address, FEE);
@@ -819,5 +821,36 @@ describe("Autopay - e2e tests", function() {
     assert(tipsArray.length == 0, "tipsArray should be empty")
     currentTip = await autopay.getCurrentTip(QUERYID1)
     assert(currentTip == 0, "currentTip should be 0")
+  })
+
+  it("test query data storage", async function() {
+    await tellor.approve(autopay.address, h.toWei("1000"))
+    queryDataArgs = abiCoder.encode(["string", "string"], ["eth", "usd"]);
+    queryData = abiCoder.encode(["string", "bytes"], ["SpotPrice", queryDataArgs]);
+    queryId = keccak256(queryData);
+    await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+    await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+    await tellor.connect(accounts[2]).submitValue(queryId, h.uintTob32(3550), 0, queryData);
+    await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+
+    queryDataArgs = abiCoder.encode(["string", "string"], ["eth", "usd"]);
+    queryData = abiCoder.encode(["string", "bytes"], ["SpotPrice", queryDataArgs]);
+    queryId = keccak256(queryData);
+
+    blocky = await h.getBlock();
+    await autopay.setupDataFeed(queryId,h.toWei("1"),blocky.timestamp,3600,600,1,3,queryData,0);
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
+
+    // setup second feed for same query id
+    await autopay.setupDataFeed(queryId,h.toWei("1"),blocky.timestamp,3600,1200,1,3,queryData,0);
+    storedQueryData = await queryDataStorage.getQueryData(queryId);
+    assert(storedQueryData == queryData, "query data not stored correctly");
   })
 });
