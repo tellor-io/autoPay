@@ -367,6 +367,9 @@ contract Autopay is UsingTellor {
      * @return amount of tip
      */
     function getCurrentTip(bytes32 _queryId) public view returns (uint256) {
+        if(tips[_queryId].length == 0){
+            return 0;
+        }
         (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
         Tip memory _lastTip = tips[_queryId][tips[_queryId].length - 1];
         if (_timestampRetrieved < _lastTip.timestamp) {

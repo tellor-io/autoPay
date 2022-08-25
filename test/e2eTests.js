@@ -810,4 +810,11 @@ describe("Autopay - e2e tests", function() {
     expectedTellorReward = h.toWei((200 * FEE / 1000).toString())
     expect(await tellor.balanceOf(tellor.address)).to.equal(BigInt(expectedTellorReward) + BigInt(expectedBalanceTellor))
   })
+
+  it("ensure getCurrentTip doesn't fail if no tip", async function() {
+    tipsArray = await autopay.getPastTips(QUERYID1)
+    assert(tipsArray.length == 0, "tipsArray should be empty")
+    currentTip = await autopay.getCurrentTip(QUERYID1)
+    assert(currentTip == 0, "currentTip should be 0")
+  })
 });

@@ -214,10 +214,12 @@ describe("Autopay - function tests", () => {
     expect(result[6]).to.equal(0);
   });
   it("getCurrentTip", async () => {
+    let res = await autopay.getCurrentTip(QUERYID1);
+    assert(res == 0, "tip amount should be zero")
     await h.expectThrow(autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x'));
     await tellor.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x')
-    let res = await autopay.getCurrentTip(QUERYID1);
+    res = await autopay.getCurrentTip(QUERYID1);
     assert(res == web3.utils.toWei("100"), "tip should be correct")
   });
   it("getPastTips", async () => {
