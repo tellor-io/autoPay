@@ -32,7 +32,8 @@ contract TellorPlayground {
     mapping(address => mapping(address => uint256)) private _allowances;
     mapping(address => uint256) private _balances;
 
-    uint256 public stakeAmount;
+    uint256 public reportingLock = 12 hours;
+    uint256 public stakeAmount = 100 ether;
     uint256 public constant timeBasedReward = 5e17; // time based reward for a reporter for successfully submitting a value
     uint256 public tipsInContract; // number of tips within the contract
     uint256 public voteCount;
