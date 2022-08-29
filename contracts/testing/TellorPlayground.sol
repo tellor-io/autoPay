@@ -32,7 +32,6 @@ contract TellorPlayground {
     mapping(address => mapping(address => uint256)) private _allowances;
     mapping(address => uint256) private _balances;
 
-    uint256 public reportingLock = 12 hours;
     uint256 public stakeAmount = 100 ether;
     uint256 public constant timeBasedReward = 5e17; // time based reward for a reporter for successfully submitting a value
     uint256 public tipsInContract; // number of tips within the contract
@@ -287,6 +286,16 @@ contract TellorPlayground {
         _timestampRetrieved = getTimestampbyQueryIdandIndex(_queryId, _index);
         _value = values[_queryId][_timestampRetrieved];
         return (true, _value, _timestampRetrieved);
+    }
+
+    /**
+     * @dev Mock function for retrieving report gas cost estimate in terms of staking token
+     * @param _queryId is the datafeed unique identifier
+     * @param _timestamp is the timestamp of the report
+     * @return uint256 gas cost estimate in terms of staking token; always returns 5e17
+     */
+    function getGasUsedByReport(bytes32 _queryId, uint256 _timestamp) external view returns (uint256) {
+        return 0.5 ether;
     }
 
     /**

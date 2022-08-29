@@ -111,13 +111,15 @@ contract Autopay is UsingTellor {
         require(tips[_queryId].length > 0,"no tips submitted for this queryId");
         uint256 _cumulativeReward;
         uint256 _thisReward;
+        uint256 _rewardCap;
         uint256 _extraReward; // tip above stakeAmount cap
         uint256 _stakeAmount = tellor.stakeAmount();
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
+            _rewardCap = _stakeAmount + tellor.getGasUsedByReport(_queryId, _timestamps[_i]) * 2;
             _thisReward = _getOneTimeTipAmount(_queryId, _timestamps[_i]);
-            if(_thisReward > _stakeAmount) {
-                _cumulativeReward += _stakeAmount;
-                _extraReward += _thisReward - _stakeAmount;
+            if(_thisReward > _rewardCap) {
+                _cumulativeReward += _rewardCap;
+                _extraReward += _thisReward - _rewardCap;
             } else {
                 _cumulativeReward += _thisReward;
             }
@@ -166,6 +168,7 @@ contract Autopay is UsingTellor {
         uint256 _stakeAmount = tellor.stakeAmount();
         uint256 _cumulativeReward;
         uint256 _thisReward;
+        uint256 _rewardCap;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             require(
                 block.timestamp - _timestamps[_i] > 12 hours,
@@ -180,8 +183,9 @@ contract Autopay is UsingTellor {
                 _queryId,
                 _timestamps[_i]
             );
-            if(_thisReward > _stakeAmount) {
-                _cumulativeReward += _stakeAmount;
+            _rewardCap = _stakeAmount + tellor.getGasUsedByReport(_queryId, _timestamps[_i]) * 2;
+            if(_thisReward > _rewardCap) {
+                _cumulativeReward += _rewardCap;
             } else {
                 _cumulativeReward += _thisReward;
             }

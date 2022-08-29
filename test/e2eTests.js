@@ -792,9 +792,9 @@ describe("Autopay - e2e tests", function() {
     blocky1 = await h.getBlock();
     await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[1]).claimOneTimeTip(QUERYID1, [blocky1.timestamp])
-    expectedBal = h.toWei((100 * (1000 - FEE) / 1000).toString())
+    expectedBal = h.toWei((101 * (1000 - FEE) / 1000).toString())
     expect(await tellor.balanceOf(accounts[1].address)).to.equal(expectedBal)
-    expectedBalanceTellor = h.toWei((100 * FEE / 1000 + 100).toString())
+    expectedBalanceTellor = h.toWei((101 * FEE / 1000 + 99).toString())
     expect(await tellor.balanceOf(tellor.address)).to.equal(expectedBalanceTellor)
 
     // cap autopay reward at stakeAmount
@@ -810,9 +810,9 @@ describe("Autopay - e2e tests", function() {
     blocky4 = await h.getBlock();
     await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky3.timestamp, blocky4.timestamp])
-    expectedBal = h.toWei((200 * (1000 - FEE) / 1000).toString())
+    expectedBal = h.toWei((202 * (1000 - FEE) / 1000).toString())
     expect(await tellor.balanceOf(accounts[2].address)).to.equal(expectedBal)
-    expectedTellorReward = h.toWei((200 * FEE / 1000).toString())
+    expectedTellorReward = h.toWei((202 * FEE / 1000).toString())
     expect(await tellor.balanceOf(tellor.address)).to.equal(BigInt(expectedTellorReward) + BigInt(expectedBalanceTellor))
   })
 
