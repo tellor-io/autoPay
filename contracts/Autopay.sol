@@ -86,17 +86,15 @@ contract Autopay is UsingTellor {
     /**
      * @dev Initializes system parameters
      * @param _tellor address of Tellor contract
-     * @param _token address of token used for tips
      * @param _queryDataStorage address of query data storage contract
      * @param _fee percentage, 1000 is 100%, 50 is 5%, etc.
      */
     constructor(
         address payable _tellor,
-        address _token,
         address _queryDataStorage,
         uint256 _fee
     ) UsingTellor(_tellor) {
-        token = IERC20(_token);
+        token = IERC20(tellor.token());
         queryDataStorage = IQueryDataStorage(_queryDataStorage);
         fee = _fee;
     }

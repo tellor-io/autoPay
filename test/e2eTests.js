@@ -27,7 +27,7 @@ describe("Autopay - e2e tests", function() {
     queryDataStorage = await QueryDataStorage.deploy();
     await queryDataStorage.deployed();
     const Autopay = await ethers.getContractFactory("AutopayMock");
-    autopay = await Autopay.deploy(tellor.address, tellor.address, queryDataStorage.address, FEE);
+    autopay = await Autopay.deploy(tellor.address, queryDataStorage.address, FEE);
     await autopay.deployed();
   });
 
