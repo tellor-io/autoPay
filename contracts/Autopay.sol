@@ -4,7 +4,6 @@ pragma solidity 0.8.3;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IQueryDataStorage.sol";
-import "hardhat/console.sol";
 
 /**
  @author Tellor Inc.
@@ -55,7 +54,7 @@ contract Autopay is UsingTellor {
     event DataFeedFunded(
         bytes32 indexed _queryId,
         bytes32 indexed _feedId,
-        uint256 _amount,
+        uint256 indexed _amount,
         address _feedFunder,
         FeedDetails _feedDetails
     );
@@ -66,20 +65,20 @@ contract Autopay is UsingTellor {
         address _feedCreator
     );
     event OneTimeTipClaimed(
-        bytes32 _queryId,
-        uint256 _amount,
-        address _reporter
+        bytes32 indexed _queryId,
+        uint256 indexed _amount,
+        address indexed _reporter
     );
     event TipAdded(
-        bytes32 _queryId,
-        uint256 _amount,
+        bytes32 indexed _queryId,
+        uint256 indexed _amount,
         bytes _queryData,
         address _tipper
     );
     event TipClaimed(
-        bytes32 _feedId,
-        bytes32 _queryId,
-        uint256 _amount,
+        bytes32 indexed _feedId,
+        bytes32 indexed _queryId,
+        uint256 indexed _amount,
         address _reporter
     );
 
@@ -107,17 +106,25 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
-    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps) external{
-        require(tips[_queryId].length > 0,"no tips submitted for this queryId");
+    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps)
+        external
+    {
+        require(
+            tips[_queryId].length > 0,
+            "no tips submitted for this queryId"
+        );
         uint256 _cumulativeReward;
         uint256 _thisReward;
         uint256 _rewardCap;
         uint256 _extraReward; // tip above stakeAmount cap
         uint256 _stakeAmount = tellor.stakeAmount();
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _rewardCap = _stakeAmount + tellor.getGasUsedByReport(_queryId, _timestamps[_i]) * 2;
+            _rewardCap =
+                _stakeAmount +
+                tellor.getGasUsedByReport(_queryId, _timestamps[_i]) *
+                2;
             _thisReward = _getOneTimeTipAmount(_queryId, _timestamps[_i]);
-            if(_thisReward > _rewardCap) {
+            if (_thisReward > _rewardCap) {
                 _cumulativeReward += _rewardCap;
                 _extraReward += _thisReward - _rewardCap;
             } else {
@@ -130,8 +137,13 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        token.approve(address(tellor), (_cumulativeReward * fee) / 1000 + _extraReward);
-        tellor.addStakingRewards((_cumulativeReward * fee) / 1000 + _extraReward);
+        token.approve(
+            address(tellor),
+            (_cumulativeReward * fee) / 1000 + _extraReward
+        );
+        tellor.addStakingRewards(
+            (_cumulativeReward * fee) / 1000 + _extraReward
+        );
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -161,10 +173,7 @@ contract Autopay is UsingTellor {
     ) external {
         Feed storage _feed = dataFeed[_queryId][_feedId];
         uint256 _balance = _feed.details.balance;
-        require(
-            _balance > 0,
-            "no funds available for this feed"
-        );
+        require(_balance > 0, "no funds available for this feed");
         uint256 _stakeAmount = tellor.stakeAmount();
         uint256 _cumulativeReward;
         uint256 _thisReward;
@@ -178,13 +187,12 @@ contract Autopay is UsingTellor {
                 getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
-            _thisReward = _getRewardAmount(
-                _feedId,
-                _queryId,
-                _timestamps[_i]
-            );
-            _rewardCap = _stakeAmount + tellor.getGasUsedByReport(_queryId, _timestamps[_i]) * 2;
-            if(_thisReward > _rewardCap) {
+            _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
+            _rewardCap =
+                _stakeAmount +
+                tellor.getGasUsedByReport(_queryId, _timestamps[_i]) *
+                2;
+            if (_thisReward > _rewardCap) {
                 _cumulativeReward += _rewardCap;
             } else {
                 _cumulativeReward += _thisReward;
@@ -278,7 +286,7 @@ contract Autopay is UsingTellor {
         uint256 _rewardIncreasePerSecond,
         bytes calldata _queryData,
         uint256 _amount
-    ) external returns(bytes32 _feedId) {
+    ) external returns (bytes32 _feedId) {
         require(
             _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
             "id must be hash of bytes data"
@@ -312,8 +320,8 @@ contract Autopay is UsingTellor {
         queryIdFromDataFeedId[_feedId] = _queryId;
         queryDataStorage.storeData(_queryData);
         emit NewDataFeed(_queryId, _feedId, _queryData, msg.sender);
-        if(_amount > 0){
-            fundFeed(_feedId,_queryId,_amount);
+        if (_amount > 0) {
+            fundFeed(_feedId, _queryId, _amount);
         }
         return _feedId;
     }
@@ -345,7 +353,13 @@ contract Autopay is UsingTellor {
                 _tips[_tips.length - 1].amount += _amount;
                 _tips[_tips.length - 1].cumulativeTips += _amount;
             } else {
-                _tips.push(Tip(_amount, block.timestamp, _tips[_tips.length - 1].cumulativeTips + _amount));
+                _tips.push(
+                    Tip(
+                        _amount,
+                        block.timestamp,
+                        _tips[_tips.length - 1].cumulativeTips + _amount
+                    )
+                );
             }
         }
         if (
@@ -369,7 +383,11 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @return feedIds array for queryId
      */
-    function getCurrentFeeds(bytes32 _queryId) external view returns (bytes32[] memory){
+    function getCurrentFeeds(bytes32 _queryId)
+        external
+        view
+        returns (bytes32[] memory)
+    {
         return currentFeeds[_queryId];
     }
 
@@ -380,7 +398,7 @@ contract Autopay is UsingTellor {
      */
     function getCurrentTip(bytes32 _queryId) public view returns (uint256) {
         // if no tips, return 0
-        if(tips[_queryId].length == 0){
+        if (tips[_queryId].length == 0) {
             return 0;
         }
         (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
@@ -397,21 +415,25 @@ contract Autopay is UsingTellor {
      * @param _feedId unique feedId of parameters
      * @return FeedDetails details of specified feed
      */
-    function getDataFeed(bytes32 _feedId) external view returns (FeedDetails memory){
+    function getDataFeed(bytes32 _feedId)
+        external
+        view
+        returns (FeedDetails memory)
+    {
         return (dataFeed[queryIdFromDataFeedId[_feedId]][_feedId].details);
     }
 
     /**
      * @dev Getter function for currently funded feeds
      */
-    function getFundedFeeds() external view returns (bytes32[] memory){
+    function getFundedFeeds() external view returns (bytes32[] memory) {
         return feedsWithFunding;
     }
 
     /**
      * @dev Getter function for queryIds with current one time tips
      */
-    function getFundedQueryIds() external view returns (bytes32[] memory){
+    function getFundedQueryIds() external view returns (bytes32[] memory) {
         return queryIdsWithFunding;
     }
 
@@ -420,7 +442,7 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @return count of tips available
      */
-    function getPastTipCount(bytes32 _queryId) external view returns (uint256){
+    function getPastTipCount(bytes32 _queryId) external view returns (uint256) {
         return tips[_queryId].length;
     }
 
@@ -429,7 +451,11 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @return Tip struct (amount/timestamp) of all past tips
      */
-    function getPastTips(bytes32 _queryId) external view returns (Tip[] memory){
+    function getPastTips(bytes32 _queryId)
+        external
+        view
+        returns (Tip[] memory)
+    {
         return tips[_queryId];
     }
 
@@ -477,12 +503,8 @@ contract Autopay is UsingTellor {
         uint256 _thisReward;
         uint256 _stakeAmount = tellor.stakeAmount();
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _thisReward = _getRewardAmount(
-                _feedId,
-                _queryId,
-                _timestamps[_i]
-            );
-            if (_thisReward > _stakeAmount){
+            _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
+            if (_thisReward > _stakeAmount) {
                 _cumulativeReward += _stakeAmount;
             } else {
                 _cumulativeReward += _thisReward;
@@ -524,7 +546,11 @@ contract Autopay is UsingTellor {
      * @param _b bytes value to convert to uint256
      * @return _number uint256 converted from bytes
      */
-    function _bytesToUint(bytes memory _b) internal pure returns(uint256 _number){
+    function _bytesToUint(bytes memory _b)
+        internal
+        pure
+        returns (uint256 _number)
+    {
         for (uint256 _i = 0; _i < _b.length; _i++) {
             _number = _number * 256 + uint8(_b[_i]);
         }
@@ -545,7 +571,10 @@ contract Autopay is UsingTellor {
             "buffer time has not passed"
         );
         require(!isInDispute(_queryId, _timestamp), "value disputed");
-        require(msg.sender == getReporterByTimestamp(_queryId, _timestamp), "msg sender must be reporter address");
+        require(
+            msg.sender == getReporterByTimestamp(_queryId, _timestamp),
+            "msg sender must be reporter address"
+        );
         Tip[] storage _tips = tips[_queryId];
         uint256 _min = 0;
         uint256 _max = _tips.length;
@@ -572,10 +601,13 @@ contract Autopay is UsingTellor {
         _tips[_min].amount = 0;
         uint256 _minBackup = _min;
         // check whether eligible for previous tips in array due to disputes
-        (,uint256 _indexNow) = getIndexForDataBefore(_queryId, _timestamp + 1);
-        (bool _found, uint256 _indexBefore) = getIndexForDataBefore(_queryId, _timestampBefore + 1);
+        (, uint256 _indexNow) = getIndexForDataBefore(_queryId, _timestamp + 1);
+        (bool _found, uint256 _indexBefore) = getIndexForDataBefore(
+            _queryId,
+            _timestampBefore + 1
+        );
         if (_indexNow - _indexBefore > 1 || !_found) {
-            if(!_found) {
+            if (!_found) {
                 _tipAmount = _tips[_minBackup].cumulativeTips;
             } else {
                 _max = _min;
@@ -590,8 +622,11 @@ contract Autopay is UsingTellor {
                     }
                 }
                 _min++;
-                if(_min < _minBackup) {
-                    _tipAmount = _tips[_minBackup].cumulativeTips - _tips[_min].cumulativeTips + _tips[_min].amount;
+                if (_min < _minBackup) {
+                    _tipAmount =
+                        _tips[_minBackup].cumulativeTips -
+                        _tips[_min].cumulativeTips +
+                        _tips[_min].amount;
                 }
             }
         }
@@ -615,13 +650,13 @@ contract Autopay is UsingTellor {
         }
         uint256 _time;
         //loop handles for dispute (value = "" if disputed)
-        while(_count > 0){
-                _count--;
-                _time = getTimestampbyQueryIdandIndex(_queryId, _count);
-                _value = retrieveData(_queryId, _time);
-                if (_value.length > 0) {
-                    return (_value, _time);
-                }
+        while (_count > 0) {
+            _count--;
+            _time = getTimestampbyQueryIdandIndex(_queryId, _count);
+            _value = retrieveData(_queryId, _time);
+            if (_value.length > 0) {
+                return (_value, _time);
+            }
         }
         return (bytes(""), _time);
     }
