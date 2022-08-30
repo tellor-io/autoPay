@@ -13,6 +13,12 @@ describe("Autopay - function tests", () => {
   const QUERYID1 = h.uintTob32(1);
   const QUERYID2 = h.uintTob32(2);
   const FEE = 10
+  const TRB_QUERY_DATA_ARGS = abiCoder.encode(["string", "string"], ["trb", "usd"])
+  const TRB_QUERY_DATA = abiCoder.encode(["string", "bytes"], ["SpotPrice", TRB_QUERY_DATA_ARGS])
+  const TRB_QUERY_ID = keccak256(TRB_QUERY_DATA)
+  const ETH_QUERY_DATA_ARGS = abiCoder.encode(["string", "string"], ["eth", "usd"])
+  const ETH_QUERY_DATA = abiCoder.encode(["string", "bytes"], ["SpotPrice", ETH_QUERY_DATA_ARGS])
+  const ETH_QUERY_ID = keccak256(ETH_QUERY_DATA)
 
   beforeEach(async () => {
     accounts = await ethers.getSigners();
@@ -24,7 +30,7 @@ describe("Autopay - function tests", () => {
     queryDataStorage = await QueryDataStorage.deploy();
     await queryDataStorage.deployed();
     const Autopay = await ethers.getContractFactory("AutopayMock");
-    autopay = await Autopay.deploy(tellor.address, queryDataStorage.address, FEE);
+    autopay = await Autopay.deploy(tellor.address, queryDataStorage.address, FEE, TRB_QUERY_ID, ETH_QUERY_ID, 18);
     await autopay.deployed();
     firstBlocky = await h.getBlock();
     await autopay.setupDataFeed(QUERYID1,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0,"0x",0);

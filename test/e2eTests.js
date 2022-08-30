@@ -16,6 +16,12 @@ describe("Autopay - e2e tests", function() {
   const QUERYID3 = h.uintTob32(3);
   const FEE = 10
   const abiCoder = new ethers.utils.AbiCoder;
+  const TRB_QUERY_DATA_ARGS = abiCoder.encode(["string", "string"], ["trb", "usd"])
+  const TRB_QUERY_DATA = abiCoder.encode(["string", "bytes"], ["SpotPrice", TRB_QUERY_DATA_ARGS])
+  const TRB_QUERY_ID = keccak256(TRB_QUERY_DATA)
+  const ETH_QUERY_DATA_ARGS = abiCoder.encode(["string", "string"], ["eth", "usd"])
+  const ETH_QUERY_DATA = abiCoder.encode(["string", "bytes"], ["SpotPrice", ETH_QUERY_DATA_ARGS])
+  const ETH_QUERY_ID = keccak256(ETH_QUERY_DATA)
 
   beforeEach(async function() {
     accounts = await ethers.getSigners();
@@ -27,7 +33,7 @@ describe("Autopay - e2e tests", function() {
     queryDataStorage = await QueryDataStorage.deploy();
     await queryDataStorage.deployed();
     const Autopay = await ethers.getContractFactory("AutopayMock");
-    autopay = await Autopay.deploy(tellor.address, queryDataStorage.address, FEE);
+    autopay = await Autopay.deploy(tellor.address, queryDataStorage.address, FEE, TRB_QUERY_ID, ETH_QUERY_ID, 18);
     await autopay.deployed();
   });
 
@@ -785,23 +791,33 @@ describe("Autopay - e2e tests", function() {
   })
 
   it("cap rewards at stakeAmount", async function() {
+    // submit prices for TRB and ETH
+    trbPrice = 10
+    ethPrice = 1000
+    stakeAmount = 100
+    tipAmount = 200
+    await tellor.submitValue(TRB_QUERY_ID, h.uintTob32(h.toWei(trbPrice.toString())), 0, TRB_QUERY_DATA)
+    await tellor.submitValue(ETH_QUERY_ID, h.uintTob32(h.toWei(ethPrice.toString())), 0, ETH_QUERY_DATA)
+    await h.advanceTime(3600 * 12)
+
     // cap one time tip at stakeAmount
-    await tellor.approve(autopay.address, h.toWei("200"))
-    await autopay.tip(QUERYID1, h.toWei("200"),'0x')
+    await tellor.approve(autopay.address, h.toWei(tipAmount.toString()))
+    await autopay.tip(QUERYID1, h.toWei(tipAmount.toString()),'0x')
     await tellor.connect(accounts[1]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
     blocky1 = await h.getBlock();
     await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[1]).claimOneTimeTip(QUERYID1, [blocky1.timestamp])
-    expectedBal = h.toWei((101 * (1000 - FEE) / 1000).toString())
+    expectedCap = BigInt(400000) * BigInt(1e9) * BigInt(h.toWei(ethPrice.toString())) / BigInt(h.toWei(trbPrice.toString())) + BigInt(h.toWei(stakeAmount.toString()))
+    expectedBal = expectedCap * BigInt(1000 - FEE) / BigInt(1000)
     expect(await tellor.balanceOf(accounts[1].address)).to.equal(expectedBal)
-    expectedBalanceTellor = h.toWei((101 * FEE / 1000 + 99).toString())
+    expectedBalanceTellor = BigInt(h.toWei(tipAmount.toString())) - expectedBal
     expect(await tellor.balanceOf(tellor.address)).to.equal(expectedBalanceTellor)
 
     // cap autopay reward at stakeAmount
     await tellor.approve(autopay.address, h.toWei("500"))
     let blocky2 = await h.getBlock();
-    await autopay.setupDataFeed(QUERYID1, h.toWei("200"), blocky1.timestamp, 3600, 600, 0, 0, "0x", h.toWei("500"));
-    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("200"), blocky1.timestamp, 3600, 600, 0, 0]));
+    await autopay.setupDataFeed(QUERYID1, h.toWei(tipAmount.toString()), blocky1.timestamp, 3600, 600, 0, 0, "0x", h.toWei("500"));
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei(tipAmount.toString()), blocky1.timestamp, 3600, 600, 0, 0]));
     
     await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(101), 0, "0x");
     blocky3 = await h.getBlock();
@@ -810,9 +826,11 @@ describe("Autopay - e2e tests", function() {
     blocky4 = await h.getBlock();
     await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky3.timestamp, blocky4.timestamp])
-    expectedBal = h.toWei((202 * (1000 - FEE) / 1000).toString())
+    expectedCap = expectedCap * BigInt(2)
+    // expectedBal = h.toWei((202 * (1000 - FEE) / 1000).toString())
+    expectedBal = expectedCap * BigInt(1000 - FEE) / BigInt(1000)
     expect(await tellor.balanceOf(accounts[2].address)).to.equal(expectedBal)
-    expectedTellorReward = h.toWei((202 * FEE / 1000).toString())
+    expectedTellorReward = expectedCap * BigInt(FEE) / BigInt(1000)
     expect(await tellor.balanceOf(tellor.address)).to.equal(BigInt(expectedTellorReward) + BigInt(expectedBalanceTellor))
   })
 
@@ -852,5 +870,9 @@ describe("Autopay - e2e tests", function() {
     await autopay.setupDataFeed(queryId,h.toWei("1"),blocky.timestamp,3600,1200,1,3,queryData,0);
     storedQueryData = await queryDataStorage.getQueryData(queryId);
     assert(storedQueryData == queryData, "query data not stored correctly");
+  })
+
+  it("test reward cap with six decimals eth price", async function() {
+    assert(1 == 0, "test not implemented")
   })
 });
