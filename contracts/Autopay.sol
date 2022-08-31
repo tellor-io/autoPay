@@ -189,7 +189,7 @@ contract Autopay is UsingTellor {
                 "buffer time has not passed"
             );
             require(
-                getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
+                tellor.getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
             _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
@@ -573,7 +573,7 @@ contract Autopay is UsingTellor {
         );
         require(!isInDispute(_queryId, _timestamp), "value disputed");
         require(
-            msg.sender == getReporterByTimestamp(_queryId, _timestamp),
+            msg.sender == tellor.getReporterByTimestamp(_queryId, _timestamp),
             "msg sender must be reporter address"
         );
         Tip[] storage _tips = tips[_queryId];
@@ -726,12 +726,62 @@ contract Autopay is UsingTellor {
      */
     function _getRewardCap() internal view returns (uint256 _rewardCap) {
         _rewardCap = tellor.stakeAmount();
-        (bytes memory _stakingTokenPriceBytes, uint256 _timestampRetrievedStaking) = getDataBefore(stakingTokenPriceQueryId, block.timestamp - 4 hours);
-        (bytes memory _baseTokenPriceBytes, uint256 _timestampRetrievedBase) = getDataBefore(baseTokenPriceQueryId, block.timestamp - 4 hours);
+        (,bytes memory _stakingTokenPriceBytes, uint256 _timestampRetrievedStaking) = getDataBefore(stakingTokenPriceQueryId, block.timestamp - 4 hours);
+        (,bytes memory _baseTokenPriceBytes, uint256 _timestampRetrievedBase) = getDataBefore(baseTokenPriceQueryId, block.timestamp - 4 hours);
         if(_timestampRetrievedBase > 0 && _timestampRetrievedStaking > 0) {
             uint256 _stakingTokenPrice = _bytesToUint(_stakingTokenPriceBytes);
             uint256 _baseTokenPrice = _bytesToUint(_baseTokenPriceBytes) * 10 ** (18 - baseTokenPriceDecimals);
             _rewardCap += tx.gasprice * 400000 * _baseTokenPrice / _stakingTokenPrice;
         }
     }
+    // tip listener
+    struct SingleTipsInfo{
+        bytes queryData;
+        uint256 tip;
+    }
+    struct DetailsWithQueryData {
+        FeedDetails details;
+        bytes queryData;
+    }
+    function getFundedSingleTipsInfo() external view returns (SingleTipsInfo[] memory){
+        bytes32[] memory _fundedQueryIds = this.getFundedQueryIds();
+        SingleTipsInfo[] memory _query = new SingleTipsInfo[](_fundedQueryIds.length);
+        for(uint i=0; i<_fundedQueryIds.length; i++){
+            bytes memory _data = queryDataStorage.getQueryData(_fundedQueryIds[i]);
+            uint256 _reward = this.getCurrentTip(_fundedQueryIds[i]);
+            _query[i].queryData = _data;
+            _query[i].tip = _reward;
+        }
+        return _query;
+    }
+    function getAllFundedFeeds() external view returns (DetailsWithQueryData[] memory) {
+        bytes32[] memory _feeds = this.getFundedFeeds();
+        DetailsWithQueryData[] memory _details = new DetailsWithQueryData[](_feeds.length);
+        for (uint i=0; i < _feeds.length; i++) {
+            FeedDetails memory x = this.getDataFeed(_feeds[i]);
+            bytes32 _queryId = this.getQueryIdFromFeedId(_feeds[i]);
+            bytes memory y = queryDataStorage.getQueryData(_queryId);
+            _details[i].details = x;
+            _details[i].queryData = y;
+        }
+        return _details;
+    }
+
+    function getRewardClaimedStatuses(
+            bytes32 _feedId,
+            bytes32 _queryId,
+            uint256[] calldata _timestamp
+        ) external view returns (bool[] memory status) {
+            for (uint i=0; i<_timestamp.length; i++) {
+                status[i] = dataFeed[_queryId][_feedId].rewardClaimed[_timestamp[i]];
+            }
+            return status;
+        }
+        // function getAllFundedFeeds() external view returns (FeedDetails[] memory _details){
+    //     bytes32[] memory _feeds = this.getFundedFeeds();
+    //     for (uint i=0; i < _feeds.length; i++){
+    //         _details[i] = this.getDataFeed(_feeds[i]);
+    //     }
+    //     return _details;
+    // }
 }
