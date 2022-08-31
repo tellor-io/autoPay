@@ -4,6 +4,7 @@ pragma solidity 0.8.3;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IQueryDataStorage.sol";
+import "hardhat/console.sol";
 
 /**
  @author Tellor Inc.
@@ -730,7 +731,7 @@ contract Autopay is UsingTellor {
         (,bytes memory _baseTokenPriceBytes, uint256 _timestampRetrievedBase) = getDataBefore(baseTokenPriceQueryId, block.timestamp - 4 hours);
         if(_timestampRetrievedBase > 0 && _timestampRetrievedStaking > 0) {
             uint256 _stakingTokenPrice = _bytesToUint(_stakingTokenPriceBytes);
-            uint256 _baseTokenPrice = _bytesToUint(_baseTokenPriceBytes) * 10 ** (18 - baseTokenPriceDecimals);
+            uint256 _baseTokenPrice = _bytesToUint(_baseTokenPriceBytes) * 10**(18 - baseTokenPriceDecimals);
             _rewardCap += tx.gasprice * 400000 * _baseTokenPrice / _stakingTokenPrice;
         }
     }
