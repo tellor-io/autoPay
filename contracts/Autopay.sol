@@ -4,7 +4,6 @@ pragma solidity 0.8.3;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IQueryDataStorage.sol";
-import "hardhat/console.sol";
 
 /**
  @author Tellor Inc.
@@ -48,10 +47,20 @@ contract Autopay is UsingTellor {
         uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
     }
 
+    struct FeedDetailsWithQueryData {
+        FeedDetails details; // feed details for feed id with funding
+        bytes queryData; // query data for requested data
+    }
+
+    struct SingleTipsWithQueryData {
+        bytes queryData; // query data with single tip for requested data
+        uint256 tip; // reward amount for request
+    }
+
     struct Tip {
-        uint256 amount;
-        uint256 timestamp;
-        uint256 cumulativeTips;
+        uint256 amount; // amount tipped
+        uint256 timestamp; // time tipped
+        uint256 cumulativeTips; // cumulative tips for query ID
     }
 
     // Events
@@ -104,7 +113,10 @@ contract Autopay is UsingTellor {
         bytes32 _baseTokenPriceQueryId,
         uint256 _baseTokenPriceDecimals
     ) UsingTellor(_tellor) {
-        require(_baseTokenPriceDecimals <= 18, "Base token price decimals must be less than or equal to 18");
+        require(
+            _baseTokenPriceDecimals <= 18,
+            "Base token price decimals must be less than or equal to 18"
+        );
         token = IERC20(tellor.token());
         queryDataStorage = IQueryDataStorage(_queryDataStorage);
         fee = _fee;
@@ -426,6 +438,28 @@ contract Autopay is UsingTellor {
     }
 
     /**
+     * @dev Getter function for currently funded feed details
+     * @return FeedDetailsWithQueryData[] array of details for funded feeds
+     */
+    function getFundedFeedDetails()
+        external
+        view
+        returns (FeedDetailsWithQueryData[] memory)
+    {
+        bytes32[] memory _feeds = this.getFundedFeeds();
+        FeedDetailsWithQueryData[]
+            memory _details = new FeedDetailsWithQueryData[](_feeds.length);
+        for (uint256 i = 0; i < _feeds.length; i++) {
+            FeedDetails memory _feedDetail = this.getDataFeed(_feeds[i]);
+            bytes32 _queryId = this.getQueryIdFromFeedId(_feeds[i]);
+            bytes memory _queryData = queryDataStorage.getQueryData(_queryId);
+            _details[i].details = _feedDetail;
+            _details[i].queryData = _queryData;
+        }
+        return _details;
+    }
+
+    /**
      * @dev Getter function for currently funded feeds
      */
     function getFundedFeeds() external view returns (bytes32[] memory) {
@@ -437,6 +471,30 @@ contract Autopay is UsingTellor {
      */
     function getFundedQueryIds() external view returns (bytes32[] memory) {
         return queryIdsWithFunding;
+    }
+
+    /**
+     * @dev Getter function for currently funded single tips with queryData
+     * @return SingleTipsWithQueryData[] array of current tips
+     */
+    function getFundedSingleTipsInfo()
+        external
+        view
+        returns (SingleTipsWithQueryData[] memory)
+    {
+        bytes32[] memory _fundedQueryIds = this.getFundedQueryIds();
+        SingleTipsWithQueryData[] memory _query = new SingleTipsWithQueryData[](
+            _fundedQueryIds.length
+        );
+        for (uint256 i = 0; i < _fundedQueryIds.length; i++) {
+            bytes memory _data = queryDataStorage.getQueryData(
+                _fundedQueryIds[i]
+            );
+            uint256 _reward = this.getCurrentTip(_fundedQueryIds[i]);
+            _query[i].queryData = _data;
+            _query[i].tip = _reward;
+        }
+        return _query;
     }
 
     /**
@@ -531,6 +589,27 @@ contract Autopay is UsingTellor {
         uint256 _timestamp
     ) external view returns (bool) {
         return dataFeed[_queryId][_feedId].rewardClaimed[_timestamp];
+    }
+
+    /**
+     * @dev Getter function for reading whether a reward has been claimed
+     * @param _feedId feedId of dataFeed
+     * @param _queryId queryId of reported data
+     * @param _timestamp[] list of report timestamps
+     * @return bool[] list of rewardClaim status
+     */
+    function getRewardClaimStatusList(
+        bytes32 _feedId,
+        bytes32 _queryId,
+        uint256[] calldata _timestamp
+    ) external view returns (bool[] memory) {
+        bool[] memory _status = new bool[](_timestamp.length);
+        for (uint256 i = 0; i < _timestamp.length; i++) {
+            _status[i] = dataFeed[_queryId][_feedId].rewardClaimed[
+                _timestamp[i]
+            ];
+        }
+        return _status;
     }
 
     /**
@@ -727,12 +806,21 @@ contract Autopay is UsingTellor {
      */
     function _getRewardCap() internal view returns (uint256 _rewardCap) {
         _rewardCap = tellor.stakeAmount();
-        (bytes memory _stakingTokenPriceBytes, uint256 _timestampRetrievedStaking) = getDataBefore(stakingTokenPriceQueryId, block.timestamp - 4 hours);
-        (bytes memory _baseTokenPriceBytes, uint256 _timestampRetrievedBase) = getDataBefore(baseTokenPriceQueryId, block.timestamp - 4 hours);
-        if(_timestampRetrievedBase > 0 && _timestampRetrievedStaking > 0) {
+        (
+            bytes memory _stakingTokenPriceBytes,
+            uint256 _timestampRetrievedStaking
+        ) = getDataBefore(stakingTokenPriceQueryId, block.timestamp - 4 hours);
+        (
+            bytes memory _baseTokenPriceBytes,
+            uint256 _timestampRetrievedBase
+        ) = getDataBefore(baseTokenPriceQueryId, block.timestamp - 4 hours);
+        if (_timestampRetrievedBase > 0 && _timestampRetrievedStaking > 0) {
             uint256 _stakingTokenPrice = _bytesToUint(_stakingTokenPriceBytes);
-            uint256 _baseTokenPrice = _bytesToUint(_baseTokenPriceBytes) * 10**(18 - baseTokenPriceDecimals);
-            _rewardCap += tx.gasprice * 400000 * _baseTokenPrice / _stakingTokenPrice;
+            uint256 _baseTokenPrice = _bytesToUint(_baseTokenPriceBytes) *
+                10**(18 - baseTokenPriceDecimals);
+            _rewardCap +=
+                (tx.gasprice * 400000 * _baseTokenPrice) /
+                _stakingTokenPrice;
         }
     }
 }
