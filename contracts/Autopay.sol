@@ -123,7 +123,10 @@ contract Autopay is UsingTellor {
         );
         uint256 _cumulativeReward;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _cumulativeReward += _getOneTimeTipAmount(_queryId, _timestamps[_i]);
+            _cumulativeReward += _getOneTimeTipAmount(
+                _queryId,
+                _timestamps[_i]
+            );
         }
         require(
             token.transfer(
@@ -131,13 +134,8 @@ contract Autopay is UsingTellor {
                 _cumulativeReward - ((_cumulativeReward * fee) / 1000)
             )
         );
-        token.approve(
-            address(tellor),
-            (_cumulativeReward * fee) / 1000
-        );
-        tellor.addStakingRewards(
-            (_cumulativeReward * fee) / 1000
-        );
+        token.approve(address(tellor), (_cumulativeReward * fee) / 1000);
+        tellor.addStakingRewards((_cumulativeReward * fee) / 1000);
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
                 uint256 _idx = queryIdsWithFundingIndex[_queryId] - 1;
@@ -178,7 +176,11 @@ contract Autopay is UsingTellor {
                 getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
-            _cumulativeReward += _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
+            _cumulativeReward += _getRewardAmount(
+                _feedId,
+                _queryId,
+                _timestamps[_i]
+            );
             if (_cumulativeReward >= _balance) {
                 // Balance runs out
                 require(
@@ -529,7 +531,11 @@ contract Autopay is UsingTellor {
     ) external view returns (uint256 _cumulativeReward) {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _cumulativeReward += _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
+            _cumulativeReward += _getRewardAmount(
+                _feedId,
+                _queryId,
+                _timestamps[_i]
+            );
         }
         if (_cumulativeReward > _feed.balance) {
             _cumulativeReward = _feed.balance;
@@ -743,19 +749,18 @@ contract Autopay is UsingTellor {
             }
         }
         _rewardAmount = _feed.details.reward;
-        if (_priceChange <= _feed.details.priceThreshold) {
-            uint256 _timeDiff = _timestamp - _c;
-            require(
-                _timeDiff < _feed.details.window,
-                "timestamp not within window"
-            );
-            require(
-                _timestampBefore < _c,
-                "timestamp not first report within window"
-            );
-            // calculate time based reward if applicable
+        uint256 _timeDiff = _timestamp - _c; // time difference between report timestamp and start of interval
+        // ensure either report is first within a valid window, or price change threshold is met
+        if (_timeDiff < _feed.details.window && _timestampBefore < _c) {
+            // add time based rewards if applicable
             _rewardAmount += _feed.details.rewardIncreasePerSecond * _timeDiff;
+        } else {
+            require(
+                _priceChange > _feed.details.priceThreshold,
+                "price threshold not met"
+            );
         }
+
         if (_feed.details.balance < _rewardAmount) {
             _rewardAmount = _feed.details.balance;
         }

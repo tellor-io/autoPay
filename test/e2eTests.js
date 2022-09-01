@@ -851,4 +851,25 @@ describe("Autopay - e2e tests", function() {
     await h.advanceTime(3600 * 24 * 31)
     await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky1.timestamp]));
   })
+
+  it("price threshold met and report within interval with tbr, should get sloped reward", async function() {
+    await tellor.approve(autopay.address, h.toWei("100"))
+    let blocky0 = await h.getBlock();
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 100, h.toWei("1"), "0x", h.toWei("100"));
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 100, h.toWei("1")]));
+    // submit value to set baseline 
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    await h.advanceTime(3601)
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(200), 0, "0x");
+    blocky1 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+    assert(await tellor.balanceOf(accounts[2].address) == 0, "balance should be 0");
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky1.timestamp]);
+    console.log("balance: " + await tellor.balanceOf(accounts[2].address));
+    windowStart = blocky0.timestamp + 3600;
+    expectedRewardPlusFee = 1 + (blocky1.timestamp - windowStart)
+    expectedBalance = BigInt(h.toWei(expectedRewardPlusFee.toString())) * BigInt(1000 - FEE) / BigInt(1000);
+    assert(await tellor.balanceOf(accounts[2].address) > h.toWei("1"), "reward not correct");
+    assert(await tellor.balanceOf(accounts[2].address) == expectedBalance, "reward not correct");
+  })
 });
