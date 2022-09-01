@@ -9,7 +9,7 @@ pragma solidity 0.8.3;
  * Only the first data submission within each time window gets a reward.
 */
 
-import "./usingtellor/UsingTellor.sol";
+import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 
 contract Keeper is UsingTellor {
