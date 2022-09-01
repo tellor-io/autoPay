@@ -48,11 +48,23 @@ contract Autopay is UsingTellor {
         uint256 feedsWithFundingIndex; // index plus one of dataFeedID in feedsWithFunding array (0 if not in array)
     }
 
+    struct FeedDetailsWithQueryData {
+        FeedDetails details;  // feed details for feed id with funding
+        bytes queryData; // query data for requested data
+    }
+
+    struct SingleTipsWithQueryData {
+        bytes queryData; // query data with single tip for requested data
+        uint256 tip; // reward amount for request
+    }
+
     struct Tip {
         uint256 amount;
         uint256 timestamp;
         uint256 cumulativeTips;
     }
+
+    
 
     // Events
     event DataFeedFunded(
@@ -190,7 +202,7 @@ contract Autopay is UsingTellor {
                 "buffer time has not passed"
             );
             require(
-                tellor.getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
+                getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
             _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
@@ -426,6 +438,23 @@ contract Autopay is UsingTellor {
     }
 
     /**
+     * @dev Getter function for currently funded feed details
+     * @return FeedDetailsWithQueryData[] array of details for funded feeds
+     */
+    function getFundedFeedDetails() external view returns (FeedDetailsWithQueryData[] memory) {
+        bytes32[] memory _feeds = this.getFundedFeeds();
+        FeedDetailsWithQueryData[] memory _details = new FeedDetailsWithQueryData[](_feeds.length);
+        for (uint i=0; i < _feeds.length; i++) {
+            FeedDetails memory _feedDetail = this.getDataFeed(_feeds[i]);
+            bytes32 _queryId = this.getQueryIdFromFeedId(_feeds[i]);
+            bytes memory _queryData = queryDataStorage.getQueryData(_queryId);
+            _details[i].details = _feedDetail;
+            _details[i].queryData = _queryData;
+        }
+        return _details;
+    }
+
+    /**
      * @dev Getter function for currently funded feeds
      */
     function getFundedFeeds() external view returns (bytes32[] memory) {
@@ -437,6 +466,22 @@ contract Autopay is UsingTellor {
      */
     function getFundedQueryIds() external view returns (bytes32[] memory) {
         return queryIdsWithFunding;
+    }
+
+    /**
+    * @dev Getter function for currently funded single tips with queryData
+    * @return SingleTipsWithQueryData[] array of current tips
+    */
+    function getFundedSingleTipsInfo() external view returns (SingleTipsWithQueryData[] memory){
+        bytes32[] memory _fundedQueryIds = this.getFundedQueryIds();
+        SingleTipsWithQueryData[] memory _query = new SingleTipsWithQueryData[](_fundedQueryIds.length);
+        for(uint i=0; i<_fundedQueryIds.length; i++){
+            bytes memory _data = queryDataStorage.getQueryData(_fundedQueryIds[i]);
+            uint256 _reward = this.getCurrentTip(_fundedQueryIds[i]);
+            _query[i].queryData = _data;
+            _query[i].tip = _reward;
+        }
+        return _query;
     }
 
     /**
@@ -534,6 +579,25 @@ contract Autopay is UsingTellor {
     }
 
     /**
+     * @dev Getter function for reading whether a reward has been claimed
+     * @param _feedId feedId of dataFeed
+     * @param _queryId queryId of reported data
+     * @param _timestamp[] list of report timestamps
+     * @return bool[] list of rewardClaim status
+     */
+    function getRewardClaimStatusList(
+            bytes32 _feedId,
+            bytes32 _queryId,
+            uint256[] calldata _timestamp
+        ) external view returns (bool[] memory) {
+            bool[] memory _status = new bool[](_timestamp.length);
+            for (uint i=0; i < _timestamp.length; i++) {
+                _status[i] = dataFeed[_queryId][_feedId].rewardClaimed[_timestamp[i]];
+            }
+            return _status;
+        }
+
+    /**
      * @dev Getter function for retrieving the total amount of tips paid by a given address
      * @param _user address of user to query
      * @return uint256 total amount of tips paid by user
@@ -574,7 +638,7 @@ contract Autopay is UsingTellor {
         );
         require(!isInDispute(_queryId, _timestamp), "value disputed");
         require(
-            msg.sender == tellor.getReporterByTimestamp(_queryId, _timestamp),
+            msg.sender == getReporterByTimestamp(_queryId, _timestamp),
             "msg sender must be reporter address"
         );
         Tip[] storage _tips = tips[_queryId];
@@ -735,62 +799,4 @@ contract Autopay is UsingTellor {
             _rewardCap += tx.gasprice * 400000 * _baseTokenPrice / _stakingTokenPrice;
         }
     }
-    // tip listener
-    struct SingleTipsWithQueryData {
-        bytes queryData; // query data with single tip for requested data
-        uint256 tip; // reward amount for request
-    }
-
-    struct FeedDetailsWithQueryData {
-        FeedDetails details;  // feed details for feed id with funding
-        bytes queryData; // query data for requested data
-    }
-    /**
-    * @dev Getter function for currently funded single tips with queryData
-    */
-    function getFundedSingleTipsInfo() external view returns (SingleTipsWithQueryData[] memory){
-        bytes32[] memory _fundedQueryIds = this.getFundedQueryIds();
-        SingleTipsWithQueryData[] memory _query = new SingleTipsWithQueryData[](_fundedQueryIds.length);
-        for(uint i=0; i<_fundedQueryIds.length; i++){
-            bytes memory _data = queryDataStorage.getQueryData(_fundedQueryIds[i]);
-            uint256 _reward = this.getCurrentTip(_fundedQueryIds[i]);
-            _query[i].queryData = _data;
-            _query[i].tip = _reward;
-        }
-        return _query;
-    }
-    /**
-     * @dev Getter function for currently funded feed details
-     */
-    function getFundedFeedDetails() external view returns (FeedDetailsWithQueryData[] memory) {
-        bytes32[] memory _feeds = this.getFundedFeeds();
-        FeedDetailsWithQueryData[] memory _details = new FeedDetailsWithQueryData[](_feeds.length);
-        for (uint i=0; i < _feeds.length; i++) {
-            FeedDetails memory _feedDetail = this.getDataFeed(_feeds[i]);
-            bytes32 _queryId = this.getQueryIdFromFeedId(_feeds[i]);
-            bytes memory _queryData = queryDataStorage.getQueryData(_queryId);
-            _details[i].details = _feedDetail;
-            _details[i].queryData = _queryData;
-        }
-        return _details;
-    }
-
-    /**
-     * @dev Getter function for reading whether a reward has been claimed
-     * @param _feedId feedId of dataFeed
-     * @param _queryId queryId of reported data
-     * @param _timestamp[] list of report timestamps
-     * @return bool[] list of rewardClaim status
-     */
-    function getRewardClaimStatusList(
-            bytes32 _feedId,
-            bytes32 _queryId,
-            uint256[] calldata _timestamp
-        ) external view returns (bool[] memory) {
-            bool[] memory _status = new bool[](_timestamp.length);
-            for (uint i=0; i < _timestamp.length; i++) {
-                _status[i] = dataFeed[_queryId][_feedId].rewardClaimed[_timestamp[i]];
-            }
-            return _status;
-        }
 }
