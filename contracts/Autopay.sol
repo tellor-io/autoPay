@@ -190,7 +190,7 @@ contract Autopay is UsingTellor {
                 "buffer time has not passed"
             );
             require(
-                tellor.getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
+                getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
             _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
@@ -574,7 +574,7 @@ contract Autopay is UsingTellor {
         );
         require(!isInDispute(_queryId, _timestamp), "value disputed");
         require(
-            msg.sender == tellor.getReporterByTimestamp(_queryId, _timestamp),
+            msg.sender == getReporterByTimestamp(_queryId, _timestamp),
             "msg sender must be reporter address"
         );
         Tip[] storage _tips = tips[_queryId];
