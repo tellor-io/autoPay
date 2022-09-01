@@ -4,7 +4,6 @@ pragma solidity 0.8.3;
 import "usingtellor/contracts/UsingTellor.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IQueryDataStorage.sol";
-import "hardhat/console.sol";
 
 /**
  @author Tellor Inc.
@@ -59,9 +58,9 @@ contract Autopay is UsingTellor {
     }
 
     struct Tip {
-        uint256 amount;
-        uint256 timestamp;
-        uint256 cumulativeTips;
+        uint256 amount; // amount tipped
+        uint256 timestamp; // time tipped
+        uint256 cumulativeTips; // cumulative tips for query ID
     }
 
     // Events
