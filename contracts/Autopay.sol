@@ -16,9 +16,6 @@ contract Autopay is UsingTellor {
     IERC20 public token; // TRB token address
     IQueryDataStorage public queryDataStorage; // Query data storage contract
     uint256 public fee; // 1000 is 100%, 50 is 5%, etc.
-    uint256 public baseTokenPriceDecimals; // number of decimals used in reported base protocol token price
-    bytes32 public baseTokenPriceQueryId; // query id used for retrieving price of base protocol token
-    bytes32 public stakingTokenPriceQueryId; // query id used for retrieving price of oracle staking token
 
     mapping(bytes32 => bytes32[]) currentFeeds; // mapping queryId to dataFeedIds array
     mapping(bytes32 => mapping(bytes32 => Feed)) dataFeed; // mapping queryId to dataFeedId to details
@@ -101,28 +98,15 @@ contract Autopay is UsingTellor {
      * @param _tellor address of Tellor contract
      * @param _queryDataStorage address of query data storage contract
      * @param _fee percentage, 1000 is 100%, 50 is 5%, etc.
-     * @param _stakingTokenPriceQueryId query id used for retrieving price of oracle staking token
-     * @param _baseTokenPriceQueryId query id used for retrieving price of base protocol token
-     * @param _baseTokenPriceDecimals number of decimals in reported base token price
      */
     constructor(
         address payable _tellor,
         address _queryDataStorage,
-        uint256 _fee,
-        bytes32 _stakingTokenPriceQueryId,
-        bytes32 _baseTokenPriceQueryId,
-        uint256 _baseTokenPriceDecimals
+        uint256 _fee
     ) UsingTellor(_tellor) {
-        require(
-            _baseTokenPriceDecimals <= 18,
-            "Base token price decimals must be less than or equal to 18"
-        );
         token = IERC20(tellor.token());
         queryDataStorage = IQueryDataStorage(_queryDataStorage);
         fee = _fee;
-        stakingTokenPriceQueryId = _stakingTokenPriceQueryId;
-        baseTokenPriceQueryId = _baseTokenPriceQueryId;
-        baseTokenPriceDecimals = _baseTokenPriceDecimals;
     }
 
     /**
@@ -137,18 +121,9 @@ contract Autopay is UsingTellor {
             tips[_queryId].length > 0,
             "no tips submitted for this queryId"
         );
-        uint256 _rewardCap = _getRewardCap();
         uint256 _cumulativeReward;
-        uint256 _thisReward;
-        uint256 _extraReward; // tip above stakeAmount cap
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _thisReward = _getOneTimeTipAmount(_queryId, _timestamps[_i]);
-            if (_thisReward > _rewardCap) {
-                _cumulativeReward += _rewardCap;
-                _extraReward += _thisReward - _rewardCap;
-            } else {
-                _cumulativeReward += _thisReward;
-            }
+            _cumulativeReward += _getOneTimeTipAmount(_queryId, _timestamps[_i]);
         }
         require(
             token.transfer(
@@ -158,10 +133,10 @@ contract Autopay is UsingTellor {
         );
         token.approve(
             address(tellor),
-            (_cumulativeReward * fee) / 1000 + _extraReward
+            (_cumulativeReward * fee) / 1000
         );
         tellor.addStakingRewards(
-            (_cumulativeReward * fee) / 1000 + _extraReward
+            (_cumulativeReward * fee) / 1000
         );
         if (getCurrentTip(_queryId) == 0) {
             if (queryIdsWithFundingIndex[_queryId] != 0) {
@@ -193,9 +168,7 @@ contract Autopay is UsingTellor {
         Feed storage _feed = dataFeed[_queryId][_feedId];
         uint256 _balance = _feed.details.balance;
         require(_balance > 0, "no funds available for this feed");
-        uint256 _rewardCap = _getRewardCap();
         uint256 _cumulativeReward;
-        uint256 _thisReward;
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
             require(
                 block.timestamp - _timestamps[_i] > 12 hours,
@@ -205,12 +178,7 @@ contract Autopay is UsingTellor {
                 getReporterByTimestamp(_queryId, _timestamps[_i]) == msg.sender,
                 "message sender not reporter for given queryId and timestamp"
             );
-            _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
-            if (_thisReward > _rewardCap) {
-                _cumulativeReward += _rewardCap;
-            } else {
-                _cumulativeReward += _thisReward;
-            }
+            _cumulativeReward += _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
             if (_cumulativeReward >= _balance) {
                 // Balance runs out
                 require(
@@ -560,15 +528,8 @@ contract Autopay is UsingTellor {
         uint256[] calldata _timestamps
     ) external view returns (uint256 _cumulativeReward) {
         FeedDetails storage _feed = dataFeed[_queryId][_feedId].details;
-        uint256 _thisReward;
-        uint256 _stakeAmount = tellor.stakeAmount();
         for (uint256 _i = 0; _i < _timestamps.length; _i++) {
-            _thisReward = _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
-            if (_thisReward > _stakeAmount) {
-                _cumulativeReward += _stakeAmount;
-            } else {
-                _cumulativeReward += _thisReward;
-            }
+            _cumulativeReward += _getRewardAmount(_feedId, _queryId, _timestamps[_i]);
         }
         if (_cumulativeReward > _feed.balance) {
             _cumulativeReward = _feed.balance;
@@ -797,30 +758,6 @@ contract Autopay is UsingTellor {
         }
         if (_feed.details.balance < _rewardAmount) {
             _rewardAmount = _feed.details.balance;
-        }
-    }
-
-    /**
-     * @dev Internal function which determines the reward cap based on stake amount plus estimated gas cost
-     * @return _rewardCap max reward amount
-     */
-    function _getRewardCap() internal view returns (uint256 _rewardCap) {
-        _rewardCap = tellor.stakeAmount();
-        (
-            bytes memory _stakingTokenPriceBytes,
-            uint256 _timestampRetrievedStaking
-        ) = getDataBefore(stakingTokenPriceQueryId, block.timestamp - 4 hours);
-        (
-            bytes memory _baseTokenPriceBytes,
-            uint256 _timestampRetrievedBase
-        ) = getDataBefore(baseTokenPriceQueryId, block.timestamp - 4 hours);
-        if (_timestampRetrievedBase > 0 && _timestampRetrievedStaking > 0) {
-            uint256 _stakingTokenPrice = _bytesToUint(_stakingTokenPriceBytes);
-            uint256 _baseTokenPrice = _bytesToUint(_baseTokenPriceBytes) *
-                10**(18 - baseTokenPriceDecimals);
-            _rewardCap +=
-                (tx.gasprice * 400000 * _baseTokenPrice) /
-                _stakingTokenPrice;
         }
     }
 }
