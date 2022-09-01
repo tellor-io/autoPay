@@ -827,4 +827,28 @@ describe("Autopay - e2e tests", function() {
     storedQueryData = await queryDataStorage.getQueryData(queryId);
     assert(storedQueryData == queryData, "query data not stored correctly");
   })
+
+  it("reward expires after 1 month", async function() {
+    await tellor.approve(autopay.address, h.toWei("100"))
+    let blocky0 = await h.getBlock();
+    await autopay.setupDataFeed(QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, 0, "0x", h.toWei("100"));
+    feedId1 = ethers.utils.keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"], [QUERYID1, h.toWei("1"), blocky0.timestamp, 3600, 600, 0, 0]));
+    // submit 2 values, eligible for autopay reward 
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(100), 0, "0x");
+    blocky1 = await h.getBlock();
+    await h.advanceTime(3600)
+    await tellor.connect(accounts[2]).submitValue(QUERYID1, h.uintTob32(101), 0, "0x");
+    blocky2 = await h.getBlock();
+    await h.advanceTime(3600 * 12)
+
+    // claim reward
+    await autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky2.timestamp]);
+    
+    expectedReward = await autopay.getRewardAmount(feedId1, QUERYID1, [blocky1.timestamp]);
+    assert(expectedReward > h.toWei("0.5"), "reward not correct");
+
+    // advance past expiration time
+    await h.advanceTime(3600 * 24 * 31)
+    await h.expectThrow(autopay.connect(accounts[2]).claimTip(feedId1, QUERYID1, [blocky1.timestamp]));
+  })
 });

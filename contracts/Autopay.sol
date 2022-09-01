@@ -716,7 +716,7 @@ contract Autopay is UsingTellor {
         uint256 _timestamp
     ) internal view returns (uint256 _rewardAmount) {
         require(
-            block.timestamp - _timestamp < 12 weeks,
+            block.timestamp - _timestamp < 4 weeks,
             "timestamp too old to claim tip"
         );
         Feed storage _feed = dataFeed[_queryId][_feedId];
