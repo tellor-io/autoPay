@@ -616,4 +616,71 @@ describe("Autopay - function tests", () => {
     expect(await autopay.bytesToUint(val7)).to.equal(1)
     expect(await autopay.bytesToUint(val8)).to.equal(16)
   })
+  it("getFundedSingleTipsInfo", async() => {
+    await tellor.faucet(accounts[0].address)
+    await tellor.approve(autopay.address,web3.utils.toWei("1000"))
+    await autopay.tip(QUERYID1,web3.utils.toWei("100"),'0x')
+    await autopay.tip(TRB_QUERY_ID,web3.utils.toWei("100"),TRB_QUERY_DATA)
+    let res = await autopay.getFundedSingleTipsInfo();
+    assert(res[0].queryData == "0x")
+    assert(res[0].tip == web3.utils.toWei("100"), "first queryId tip should be correct")
+    assert(res[1].queryData == TRB_QUERY_DATA, "second queryData should be correct")
+    assert(res[1].tip == web3.utils.toWei("100"), "second queryId tip should be correct")
+  })
+  it("getFundedFeedDetails", async() => {
+    await tellor.faucet(accounts[0].address)
+    await tellor.approve(autopay.address,web3.utils.toWei("1000"))
+    let res = await autopay.getFundedFeedDetails()
+    // feed that was funded in before each section
+    assert(res[0].details.reward == h.toWei("1"), "reward should correct")
+    assert(res[0].details.balance == h.toWei("1000"), "balance should correct")
+    assert(res[0].details.startTime == firstBlocky.timestamp, "startTime should correct")
+    assert(res[0].details.window == 600, "window should correct")
+    assert(res[0].details.interval == 3600, "interval should correct")
+    assert(res[0].details.priceThreshold == 0, "priceThreshold should correct")
+    assert(res[0].details.rewardIncreasePerSecond == 0, "rewardIncreasePerSecond should correct")
+    assert(res[0].details.feedsWithFundingIndex == 1, "feedsWithFundingIndex should correct")
+  })
+  it("getRewardClaimStatusList", async() => {
+    // setup feeds with funding
+    await tellor.faucet(accounts[0].address)
+    await tellor.approve(autopay.address,web3.utils.toWei("1000"))
+    await autopay.setupDataFeed(TRB_QUERY_ID,h.toWei("10"),firstBlocky.timestamp,3600,600,0,0,TRB_QUERY_DATA,h.toWei("1000"));
+    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[TRB_QUERY_ID,h.toWei("10"),firstBlocky.timestamp,3600,600,0,0]));
+    // submit to feeds
+    await tellor.submitValue(TRB_QUERY_ID, h.uintTob32(3500), 0, TRB_QUERY_DATA);
+    let blocky = await h.getBlock();
+    timestamp1 = blocky.timestamp;
+    h.advanceTime(3600);
+    await tellor.connect(accounts[0]).submitValue(TRB_QUERY_ID, h.uintTob32(3525), 1, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp2 = blocky.timestamp;
+    h.advanceTime(3600);
+    await tellor.connect(accounts[0]).submitValue(TRB_QUERY_ID, h.uintTob32(3550), 2, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp3 = blocky.timestamp;
+    h.advanceTime(3600);
+    // check timestamps
+    let res = await autopay.getRewardClaimStatusList(bytesId,QUERYID1,[timestamp1,timestamp2,timestamp3])
+    assert(res[0] == false)
+    assert(res[1] == false)
+    assert(res[2] == false)
+    // claimTip and check status
+    h.advanceTime(84600);
+    await autopay.claimTip(bytesId, TRB_QUERY_ID, [timestamp1])
+    res = await autopay.getRewardClaimStatusList(bytesId,TRB_QUERY_ID,[timestamp1,timestamp2,timestamp3])
+    assert(res[0] == true)
+    assert(res[1] == false)
+    assert(res[2] == false)
+    await autopay.claimTip(bytesId, TRB_QUERY_ID, [timestamp3])
+    res = await autopay.getRewardClaimStatusList(bytesId,TRB_QUERY_ID,[timestamp1,timestamp2,timestamp3])
+    assert(res[0] == true)
+    assert(res[1] == false)
+    assert(res[2] == true)
+    await autopay.claimTip(bytesId, TRB_QUERY_ID, [timestamp2])
+    res = await autopay.getRewardClaimStatusList(bytesId,TRB_QUERY_ID,[timestamp1,timestamp2,timestamp3])
+    assert(res[0] == true)
+    assert(res[1] == true)
+    assert(res[2] == true)
+  })
 });
