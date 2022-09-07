@@ -578,6 +578,21 @@ contract Autopay is UsingTellor {
         }
         return _status;
     }
+    /**
+    @dev Getter function for retrieving a timestamps list by queryId and Index
+    @param _start first index
+    @param _end last index
+    @return tuple of uint256 timestamps
+    */
+
+    function getTimestampsListbyQueryIdandIndex(bytes32 _queryId, uint256 _start, uint256 _end) external view returns (uint256[] memory) {
+        uint256[] memory _stamps = new uint256[]((_end - _start)+1);
+        for (uint i = 0; i <= ((_end - _start)); i++){
+            uint256 _timestamp = getTimestampbyQueryIdandIndex(_queryId, _start+i);
+            _stamps[i] = _timestamp;
+        }
+        return _stamps;
+    }
 
     /**
      * @dev Getter function for retrieving the total amount of tips paid by a given address

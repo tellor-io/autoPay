@@ -683,4 +683,35 @@ describe("Autopay - function tests", () => {
     assert(res[1] == true)
     assert(res[2] == true)
   })
+  it("getTimestampsListbyQueryIdandIndex", async() => {
+    // submit to feeds
+    let blocky = await h.getBlock();
+    timestamp0 = blocky.timestamp;
+    await tellor.submitValue(TRB_QUERY_ID, h.uintTob32(3500), 0, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp1 = blocky.timestamp;
+    h.advanceTime(3600);
+    await tellor.connect(accounts[0]).submitValue(TRB_QUERY_ID, h.uintTob32(3525), 1, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp2 = blocky.timestamp;
+    h.advanceTime(3600);
+    await tellor.connect(accounts[0]).submitValue(TRB_QUERY_ID, h.uintTob32(3550), 2, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp3 = blocky.timestamp;
+    h.advanceTime(3600);
+    await tellor.connect(accounts[0]).submitValue(TRB_QUERY_ID, h.uintTob32(3550), 3, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp4 = blocky.timestamp;
+    h.advanceTime(3600);
+    await tellor.connect(accounts[0]).submitValue(TRB_QUERY_ID, h.uintTob32(3550), 4, TRB_QUERY_DATA);
+    blocky = await h.getBlock();
+    timestamp5 = blocky.timestamp;
+    let startIndex = await autopay.getIndexForDataBefore(TRB_QUERY_ID, timestamp0);
+    let endIndex = await autopay.getIndexForDataBefore(TRB_QUERY_ID, timestamp5);
+    let res = await autopay.getTimestampsListbyQueryIdandIndex(TRB_QUERY_ID, BigInt(startIndex[1]), BigInt(endIndex[1]));
+    assert(res[0] == timestamp1, "should be correct first submission timestamp");
+    assert(res[1] == timestamp2, "should be correct second submission timestamp");
+    assert(res[2] == timestamp3, "should be correct third sumbission timestamp");
+    assert(res[3] == timestamp4, "should be correct fourth submission timestamp");
+  });
 });
