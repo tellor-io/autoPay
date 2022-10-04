@@ -272,7 +272,7 @@ contract Autopay is UsingTellor {
         uint256 _amount
     ) external returns (bytes32 _feedId) {
         require(
-            _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
+            _queryId == keccak256(_queryData),
             "id must be hash of bytes data"
         );
         _feedId = keccak256(
@@ -322,7 +322,7 @@ contract Autopay is UsingTellor {
         bytes calldata _queryData
     ) external {
         require(
-            _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
+            _queryId == keccak256(_queryData),
             "id must be hash of bytes data"
         );
         require(_amount > 0, "tip must be greater than zero");

@@ -167,7 +167,7 @@ contract TellorPlayground {
             "nonce must match timestamp index"
         );
         require(
-            _queryId == keccak256(_queryData) || uint256(_queryId) <= 100,
+            _queryId == keccak256(_queryData),
             "id must be hash of bytes data"
         );
         values[_queryId][block.timestamp] = _value;
