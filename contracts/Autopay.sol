@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.3;
 
-import "usingtellor/contracts/UsingTellor.sol";
-import "./interfaces/IERC20.sol";
+import { UsingTellor } from "usingtellor/contracts/UsingTellor.sol";
+import { IERC20 } from "./interfaces/IERC20.sol";
 import "./interfaces/IQueryDataStorage.sol";
 
 /**
