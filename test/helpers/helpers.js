@@ -4,6 +4,7 @@ const BN = web3.utils.BN;
 
 const hash = web3.utils.keccak256;
 var assert = require("assert");
+const { BigNumber } = require("ethers");
 
 advanceTimeAndBlock = async (time) => {
   await advanceTime(time);
@@ -94,6 +95,10 @@ function toWei(n) {
   return web3.utils.toWei(n);
 }
 
+function toTRB(n) {
+  return BigNumber.from(Math.round((((n/1e9)*0.59)/11)*1e18));
+}
+
 module.exports = {
   stakeAmount: new BN(web3.utils.toWei("500", "ether")),
   timeTarget: 240,
@@ -110,6 +115,7 @@ module.exports = {
   advanceTime,
   advanceBlock,
   advanceTimeAndBlock,
+  toTRB,
   takeFifteen,
   toWei,
   expectThrow,
