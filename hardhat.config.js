@@ -38,22 +38,22 @@ require("dotenv").config();
       // },
       allowUnlimitedContractSize: true
     },
-    // rinkeby: {
-    //      url: `${process.env.NODE_URL_RINKEBY}`,
-    //      seeds: [process.env.PRIVATE_KEY],
+    // goerli: {
+    //      url: `${process.env.NODE_URL_GOERLI}`,
+    //      seeds: [process.env.TESTNET_PK],
     //      gas: 10000000 ,
     //      gasPrice: 40000000000
-    // } ,
+    // }// ,
     // mainnet: {
     //      url: `${process.env.NODE_URL_MAINNET}`,
     //      seeds: [process.env.PRIVATE_KEY],
     //      gas: 3000000 ,
     //      gasPrice: 300000000000
     //    },
-    // polygon_testnet: {
+    // mumbai: {
     //     url: `${process.env.NODE_URL_MUMBAI}`,
     //     accounts: [process.env.TESTNET_PK],
-    //     gas: 10000000 ,
+    //     gas: 5000000 ,
     //     gasPrice: 50000000000
     //   }
     // polygon: {
@@ -62,15 +62,21 @@ require("dotenv").config();
     //   gas: 2000000 ,
     //   gasPrice: 250000000000
     // }
-    // harmony_testnet: {
-    //   url: `${process.env.NODE_URL_HARMONY_TESTNET}`,
+    harmony_testnet: {
+      url: `${process.env.NODE_URL_HARMONY_TESTNET}`,
+      seeds: [process.env.TESTNET_PK],
+      gas: 2000000 ,
+      gasPrice: 250000000000
+    }
+    // arbitrum_testnet: {
+    //   url: `${process.env.NODE_URL_ARBITRUM_TESTNET}`,
     //   seeds: [process.env.TESTNET_PK],
     //   gas: 2000000 ,
     //   gasPrice: 250000000000
     // }
-    // harmony_mainnet: {
-    //   url: `${process.env.NODE_URL_HARMONY_MAINNET}`,
-    //   seeds: [process.env.MAINNET_PK],
+    // optimism_testnet: {
+    //   url: `${process.env.NODE_URL_OPTIMISM_TESTNET}`,
+    //   seeds: [process.env.TESTNET_PK],
     //   gas: 2000000 ,
     //   gasPrice: 250000000000
     // }
@@ -79,6 +85,7 @@ require("dotenv").config();
     // Your API key for Etherscan
     // Obtain one at https://etherscan.io/
     apiKey: process.env.ETHERSCAN
+    // apiKey: process.env.POLYGONSCAN
   },
 
   contractSizer: {
