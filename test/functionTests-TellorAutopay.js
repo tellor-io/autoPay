@@ -225,12 +225,68 @@ describe("Autopay - function tests", () => {
     await autopay.tip(queryId,web3.utils.toWei("10"),queryData)
     storedQueryData = await queryDataStorage.getQueryData(queryId);
     assert(storedQueryData == queryData, "query data not stored correctly");
+  }); 
+  it.only("claimOneTimeTip redo", async () => {
+    // test require statements:
+    // **ERROR MSG: no tips submitted for this queryId
+    result = await h.expectThrowMessage(autopay.claimOneTimeTip(ETH_QUERY_ID,[12345]));
+    assert.include(result.message, "no tips submitted for this queryId")
+    // **ERROR MSG: buffer time has not passed
+    await tellor.approve(autopay.address,web3.utils.toWei("100"))
+    await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("1"),ETH_QUERY_DATA)
+    await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
+    blocky0 = await h.getBlock()
+    result = await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID,[blocky0.timestamp]));
+    assert.include(result.message, "buffer time has not passed")
+    await h.advanceTime(86400/2)
+    await autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID,[blocky0.timestamp])
+    // **ERROR MSG: value disputed
+    await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("1"),ETH_QUERY_DATA)
+    await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
+    blocky1 = await h.getBlock()
+    await h.advanceTime(86400/2)
+    await tellor.beginDispute(ETH_QUERY_ID, blocky1.timestamp)
+    // await autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID,[blocky1.timestamp])
+    result = await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID, [blocky1.timestamp]))
+    assert.include(result.message, "value disputed")
+    // **ERROR MSG: msg sender must be reporter address
+    await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("1"),ETH_QUERY_DATA)
+    await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
+    blocky2 = await h.getBlock()
+    await h.advanceTime(86400/2)
+    result = await h.expectThrowMessage(autopay.connect(accounts[3]).claimOneTimeTip(ETH_QUERY_ID, [blocky2.timestamp]))
+    assert.include(result.message, "msg sender must be reporter address")
+    await autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID, [blocky2.timestamp])
+    // **ERROR MSG: tip earned by previous submission
+    await autopay.tip(ETH_QUERY_ID, h.toWei("1"), ETH_QUERY_DATA)
+    await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
+    blocky3 = await h.getBlock()
+    await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
+    blocky4 = await h.getBlock()
+    await h.advanceTime(86400/2)
+    result = await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID, [blocky4.timestamp]))
+    assert.include(result.message, "tip earned by previous submission")
+    await autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID, [blocky3.timestamp])
+    // **ERROR MSG: timestamp not eligible for tip
+    await tellor.connect(accounts[4]).submitValue(h.hash(h.bytes("hello")), h.uintTob32(3550), 0, h.bytes("hello"))
+    blocky5 = await h.getBlock()
+    await autopay.tip(h.hash(h.bytes("hello")), h.toWei("1"), h.bytes("hello"))
+    await tellor.connect(accounts[4]).submitValue(h.hash(h.bytes("hello")), h.uintTob32(3550), 0, h.bytes("hello"))
+    blocky6 = await h.getBlock()
+    await h.advanceTime(86400/2)
+    result = await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(h.hash(h.bytes("hello")), [blocky5.timestamp]))
+    assert.include(result.message, "timestamp not eligible for tip")
+    await autopay.connect(accounts[4]).claimOneTimeTip(h.hash(h.bytes("hello")), [blocky6.timestamp])
+    // **ERROR MSG: tip already claimed
+    result = await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(h.hash(h.bytes("hello")), [blocky6.timestamp]))
+    assert.include(result.message, "tip already claimed")
   });
   it("claimOneTimeTip", async () => {
     let startBal = await tellor.balanceOf(accounts[2].address);
     await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
-    blocky1 = await h.getBlock();
-    await h.expectThrow(autopay.claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//must have tip
+    blocky1 = await h.getBlock()
+    let result = await h.expectThrowMessage(autopay.claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));
+    assert.include(result.message, "no tips submitted for this queryId")
     await tellor.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("100"),ETH_QUERY_DATA)
     await h.expectThrow(autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//timestamp not eligible
@@ -239,8 +295,11 @@ describe("Autopay - function tests", () => {
     await h.expectThrow(autopay.claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//must be the reporter
     await tellor.connect(accounts[3]).submitValue(ETH_QUERY_ID, h.uintTob32(3551), 0, ETH_QUERY_DATA);
     let blocky2 = await h.getBlock();
-    await h.expectThrow(autopay.connect(accounts[3]).claimOneTimeTip(ETH_QUERY_ID,[blocky2.timestamp]));//tip earned by previous submission
+
+    await autopay.connect(accounts[3]).claimOneTimeTip(ETH_QUERY_ID,[blocky2.timestamp]);//tip earned by previous submission
+    // await h.expectThrow(autopay.connect(accounts[3]).claimOneTimeTip(ETH_QUERY_ID,[blocky2.timestamp]));//tip earned by previous submission
     await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp])); // buffer time has not passed
+    
     await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp])
     await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//tip already claimed
