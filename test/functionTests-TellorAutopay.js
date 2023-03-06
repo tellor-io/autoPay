@@ -71,15 +71,55 @@ describe("Autopay - function tests", () => {
     expect(await autopay.fee()).to.equal(10)
   });
   
-  it("claimTip", async () => {
-    // Require Checks
-    // Advancing time 12 hours to satisfy hardcoded buffer time.
-    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array));//bufferTime not passed
+  it("claimTip - require statements", async function() {
+    // **ERROR MSG: no tips submitted for this queryId
+    fakeFeedId = h.hash("fakeFeedId");
+    fakeQueryId = h.hash("fakeQueryId");
+    result = await h.expectThrowMessage(autopay.claimTip(fakeFeedId, fakeQueryId, [1234]));
+    assert.include(result.message, "no funds available for this feed");
+    // **ERROR MSG: buffer time has not passed
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array));
+    assert.include(result.message, "buffer time has not passed");
+    // **ERROR MSG: message sender not reporter for given queryId and timestamp
     await h.advanceTime(43200);
-    // Expect throw cause of bad timestamp values.
-    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, badArray));
-    // Testing Events emitted and claiming tips for later checks.
-    await h.expectThrow(autopay.connect(accounts[2]).claimTip(bytesId, ETH_QUERY_ID, array));//not reporter
+    result = await h.expectThrowMessage(autopay.claimTip(bytesId, ETH_QUERY_ID, array));
+    assert.include(result.message, "message sender not reporter for given queryId and timestamp");
+    // **ERROR MSG: reward already claimed
+    await autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, [array[0]]);
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, [array[0]]));
+    assert.include(result.message, "reward already claimed");
+    // **ERROR MSG: no value exists at timestamp
+    await tellor.beginDispute(ETH_QUERY_ID, array[1])
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, [array[1]]));
+    assert.include(result.message, "no value exists at timestamp");
+    // **ERROR MSG: price threshold not met
+    await autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),firstBlocky.timestamp,3600000,2,10000,0,ETH_QUERY_DATA,0);
+    feedIdPriceThreshold = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[ETH_QUERY_ID,h.toWei("1"),firstBlocky.timestamp,3600000,2,10000,0]));
+    await tellor.approve(autopay.address, h.toWei("1000"));
+    await autopay.fundFeed(feedIdPriceThreshold, ETH_QUERY_ID, h.toWei("1"));
+    await tellor.connect(accounts[1]).submitValue(ETH_QUERY_ID, h.uintTob32(3500), 0, ETH_QUERY_DATA);
+    await tellor.connect(accounts[1]).submitValue(ETH_QUERY_ID, h.uintTob32(3501), 0, ETH_QUERY_DATA);
+    blockyPT = await h.getBlock();
+    await h.advanceTime(43200);
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(feedIdPriceThreshold, ETH_QUERY_ID, [blockyPT.timestamp]));
+    assert.include(result.message, "price threshold not met");
+     // **ERROR MSG: insufficient balance for all submitted timestamps
+    await tellor.connect(accounts[1]).submitValue(ETH_QUERY_ID, h.uintTob32(35000), 0, ETH_QUERY_DATA);
+    blockyPT1 = await h.getBlock();
+    await tellor.connect(accounts[1]).submitValue(ETH_QUERY_ID, h.uintTob32(350000), 0, ETH_QUERY_DATA);
+    blockyPT2 = await h.getBlock();
+    await h.advanceTime(43200);
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(feedIdPriceThreshold, ETH_QUERY_ID, [blockyPT1.timestamp, blockyPT2.timestamp])); 
+    assert.include(result.message, "insufficient balance for all submitted timestamps");
+    // **ERROR MSG: timestamp too old to claim tip
+    await h.advanceTime(86400 * 7 * 4 * 6)
+    result = await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, [array[2]]));
+    assert.include(result.message, "timestamp too old to claim tip");
+  })
+
+  it("claimTip", async () => {
+    // Advancing time 12 hours to satisfy hardcoded buffer time.
+    await h.advanceTime(43200);
     await expect(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array)).to.emit(autopay, "TipClaimed").withArgs(bytesId, ETH_QUERY_ID, (h.toWei("3")), accounts[1].address);
     let payerAfter = await autopay.getDataFeed(bytesId);
     expect(payerBefore.balance).to.not.equal(payerAfter.balance);
@@ -94,39 +134,20 @@ describe("Autopay - function tests", () => {
   });
   
   it("_getRewardAmount", async () => {
-    // Require checks
-    let result;
-    let dataFeedAfter;
-    let claimedStatus;
-    await h.expectThrow(autopay.connect(accounts[10]).claimTip(bytesId, ETH_QUERY_ID, array));
     h.advanceTime(43200);
-    await autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array);
-    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array));
-    bytesId = keccak256(abiCoder.encode(["string"], ["Joshua"]));
-    await h.expectThrow(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, array));
-    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[ETH_QUERY_ID,h.toWei("1"),firstBlocky.timestamp,3600,600,0,0]));
-    blockyNoVal = await h.getBlock()
-    await h.expectThrowMessage(autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, [blockyNoVal.timestamp - (3600 * 12)])); // no value exists at timestamp
     blocky = await h.getBlock();
     await autopay.connect(accounts[10]).setupDataFeed(ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,3600,600,0,0,ETH_QUERY_DATA,0);
-    bytesId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,3600,600,0,0]));
+    bytesId0 = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,3600,600,0,0]));
     await tellor.approve(autopay.address, h.toWei("100"));
-    await autopay.fundFeed(bytesId, ETH_QUERY_ID, h.toWei("100"));
+    await autopay.fundFeed(bytesId0, ETH_QUERY_ID, h.toWei("100"));
     await tellor.connect(accounts[1]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
     let goodBlocky = await h.getBlock();
-    await tellor.connect(accounts[2]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
-    let badBlocky = await h.getBlock();
-    h.advanceTime(601);
-    await tellor.connect(accounts[3]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
-    blocky = await h.getBlock();
     h.advanceTime(43201);
-    await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, ETH_QUERY_ID, [blocky.timestamp])); // timestamp not within window
-    await h.expectThrowMessage(autopay.connect(accounts[3]).claimTip(bytesId, ETH_QUERY_ID, [badBlocky.timestamp])); // timestamp not first report within window
     // Variable updates
-    dataFeedBefore = await autopay.getDataFeed(bytesId);
-    await autopay.connect(accounts[1]).claimTip(bytesId, ETH_QUERY_ID, [goodBlocky.timestamp]);
-    dataFeedAfter = await autopay.getDataFeed(bytesId);
-    claimedStatus = await autopay.getRewardClaimedStatus(bytesId,ETH_QUERY_ID,goodBlocky.timestamp);
+    dataFeedBefore = await autopay.getDataFeed(bytesId0);
+    await autopay.connect(accounts[1]).claimTip(bytesId0, ETH_QUERY_ID, [goodBlocky.timestamp]);
+    dataFeedAfter = await autopay.getDataFeed(bytesId0);
+    claimedStatus = await autopay.getRewardClaimedStatus(bytesId0,ETH_QUERY_ID,goodBlocky.timestamp);
     expect(dataFeedAfter.balance).to.equal(h.toWei("99"));
     expect(claimedStatus).to.be.true;
   });
@@ -138,8 +159,12 @@ describe("Autopay - function tests", () => {
     // require(_feed.reward > 0,"feed not set up");
     result = await h.expectThrowMessage(autopay.fundFeed(bytesId, QUERYID2, h.toWei("1000000")));
     assert.include(result.message, "feed not set up");
+    // require(_amount > 0, "must be sending an amount");
+    result = await h.expectThrowMessage(autopay.fundFeed(bytesId, ETH_QUERY_ID, 0));
+    assert.include(result.message, "must be sending an amount");
     // require(IERC20(_feed.tellor).transferFrom(msg.sender,address(this),_amount),"ERC20: transfer amount exceeds balance");
     result = await h.expectThrowMessage(autopay.fundFeed(bytesId, ETH_QUERY_ID, h.toWei("1000300")));
+    assert.include(result.message, "Arithmetic operation underflowed or overflowed outside of an unchecked block") // real message returned
     //VARIABLE UPDATES
     // _feed.balance += _amount;
     dataFeedDetails = await autopay.getDataFeed(bytesId);
@@ -153,16 +178,29 @@ describe("Autopay - function tests", () => {
   });
   
   it("setupDataFeed", async () => {
-    await h.expectThrow(autopay.setupDataFeed(h.uintTob32(200),h.toWei("1"),blocky.timestamp,3600,600,0,0,ETH_QUERY_DATA,0));//must be hash
-    await h.expectThrow(autopay.setupDataFeed(QUERYID2,h.toWei("0"),blocky.timestamp,3600,600,0,0,ETH_QUERY_DATA,0));//reward is zero
-    await h.expectThrow(autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,600,600,0,0,ETH_QUERY_DATA,0));//already set up
-    await h.expectThrow(autopay.setupDataFeed(QUERYID2,h.toWei("1"),blocky.timestamp,600,3600,0,0,ETH_QUERY_DATA,0));//interval > window
+    //**ERROR MSG: id must be hash of bytes data
+    result = await h.expectThrowMessage(autopay.setupDataFeed(h.uintTob32(200),h.toWei("1"),blocky.timestamp,3600,600,0,0,ETH_QUERY_DATA,0));//must be hash
+    assert.include(result.message, "id must be hash of bytes data");
+    //**ERROR MSG: reward must be greater than zero
+    result = await h.expectThrowMessage(autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("0"),blocky.timestamp,3600,600,0,0,ETH_QUERY_DATA,0));//reward is zero
+    assert.include(result.message, "reward must be greater than zero");
+    //**ERROR MSG: feed must not be set up already
+    await autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,601,600,0,0,ETH_QUERY_DATA,0);
+    result = await h.expectThrowMessage(autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,601,600,0,0,ETH_QUERY_DATA,0));//already set up
+    assert.include(result.message, "feed must not be set up already");
+    //**ERROR MSG: window must be less than interval length
+    result = await h.expectThrowMessage(autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,600,3600,0,0,ETH_QUERY_DATA,0));//interval > window
+    assert.include(result.message, "window must be less than interval length");
+    //**ERROR MSG: interval must be greater than zero
+    result = await h.expectThrowMessage(autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),blocky.timestamp,0,600,0,0,ETH_QUERY_DATA,0));//interval is zero
+    assert.include(result.message, "interval must be greater than zero");
+    
     // first, simulate call with callStatic to retrieve feedId returned by setupDataFeed
     feedIdRetrieved = await autopay.callStatic.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3,ETH_QUERY_DATA,0);
     await autopay.setupDataFeed(ETH_QUERY_ID,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3,ETH_QUERY_DATA,0);
     feedId = keccak256(abiCoder.encode(["bytes32", "uint256", "uint256", "uint256", "uint256", "uint256", "uint256"],[ETH_QUERY_ID,h.toWei("1"),firstBlocky.timestamp,3600,600,1,3]));
     assert(feedId == feedIdRetrieved, "setupDataFeed should return the feedId");
-    let result = await autopay.getDataFeed(feedId);
+    result = await autopay.getDataFeed(feedId);
     expect(result.reward).to.equal(h.toWei("1"))
     expect(result.balance).to.equal(0);
     expect(result.startTime).to.equal(firstBlocky.timestamp);
@@ -226,8 +264,8 @@ describe("Autopay - function tests", () => {
     storedQueryData = await queryDataStorage.getQueryData(queryId);
     assert(storedQueryData == queryData, "query data not stored correctly");
   }); 
-  it.only("claimOneTimeTip redo", async () => {
-    // test require statements:
+  it("claimOneTimeTip - require statements", async () => {
+    // **** 1) test require statements: ****
     // **ERROR MSG: no tips submitted for this queryId
     result = await h.expectThrowMessage(autopay.claimOneTimeTip(ETH_QUERY_ID,[12345]));
     assert.include(result.message, "no tips submitted for this queryId")
@@ -281,33 +319,25 @@ describe("Autopay - function tests", () => {
     result = await h.expectThrowMessage(autopay.connect(accounts[4]).claimOneTimeTip(h.hash(h.bytes("hello")), [blocky6.timestamp]))
     assert.include(result.message, "tip already claimed")
   });
+  
   it("claimOneTimeTip", async () => {
     let startBal = await tellor.balanceOf(accounts[2].address);
     await tellor.connect(accounts[4]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
-    blocky1 = await h.getBlock()
-    let result = await h.expectThrowMessage(autopay.claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));
-    assert.include(result.message, "no tips submitted for this queryId")
+    blocky1 = await h.getBlock();
+    await h.expectThrow(autopay.claimOneTimeTip(ETH_QUERY_ID,[blocky1.timestamp]));
     await tellor.approve(autopay.address,web3.utils.toWei("100"))
     await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("100"),ETH_QUERY_DATA)
-    await h.expectThrow(autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//timestamp not eligible
+    await h.expectThrow(autopay.connect(accounts[4]).claimOneTimeTip(ETH_QUERY_ID,[blocky1.timestamp]));//timestamp not eligible
     await tellor.connect(accounts[2]).submitValue(ETH_QUERY_ID, h.uintTob32(3550), 0, ETH_QUERY_DATA);
     blocky = await h.getBlock();
-    await h.expectThrow(autopay.claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//must be the reporter
-    await tellor.connect(accounts[3]).submitValue(ETH_QUERY_ID, h.uintTob32(3551), 0, ETH_QUERY_DATA);
-    let blocky2 = await h.getBlock();
-
-    await autopay.connect(accounts[3]).claimOneTimeTip(ETH_QUERY_ID,[blocky2.timestamp]);//tip earned by previous submission
-    // await h.expectThrow(autopay.connect(accounts[3]).claimOneTimeTip(ETH_QUERY_ID,[blocky2.timestamp]));//tip earned by previous submission
-    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp])); // buffer time has not passed
-    
     await h.advanceTime(3600 * 12)
     await autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp])
-    await h.expectThrow(autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID,[blocky.timestamp]));//tip already claimed
     let res = await autopay.getCurrentTip(ETH_QUERY_ID);
     assert(res == 0, "tip should be correct")
     let finBal = await tellor.balanceOf(accounts[2].address);
     assert(finBal - startBal == web3.utils.toWei("99"), "balance should change correctly")
   });
+
   it("getDataFeed", async () => {
     result = await autopay.getDataFeed(bytesId);
     expect(result[0]).to.equal(h.toWei("1"));
