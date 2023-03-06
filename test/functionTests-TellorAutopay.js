@@ -370,17 +370,17 @@ describe("Autopay - function tests", () => {
     let blocky2 = await h.getBlock();
     res = await autopay.getPastTips(ETH_QUERY_ID)
     assert(res[0][0] == web3.utils.toWei("100"), "past tip amount should be correct")
-    assert(res[0][1] == blocky1.timestamp, "past tip amount should be correct")
+    assert(res[0][1] == blocky1.timestamp + 1, "past tip timestamp should be correct")
     assert(res[1][0] == web3.utils.toWei("200"), "past tip amount should be correct")
-    assert(res[1][1] == blocky2.timestamp, "past tip amount should be correct")
+    assert(res[1][1] == blocky2.timestamp + 1, "past tip timestamp should be correct")
     await tellor.approve(autopay.address,web3.utils.toWei("300"))
     await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("300"),ETH_QUERY_DATA)
     let blocky3 = await h.getBlock();
     res = await autopay.getPastTips(ETH_QUERY_ID)
     assert(res[0][0] == web3.utils.toWei("100"), "past tip amount should be correct")
-    assert(res[0][1] == blocky1.timestamp, "past tip 1 timestamp should be correct")
+    assert(res[0][1] == blocky1.timestamp + 1, "past tip 1 timestamp should be correct")
     assert(res[1][0] == web3.utils.toWei("500"), "past tip amount 2 should be correct")
-    assert(res[1][1] == blocky3.timestamp, "past tip 2 timestamp should be correct")
+    assert(res[1][1] == blocky3.timestamp + 1, "past tip 2 timestamp should be correct")
     assert(res.length == 2, "length should be correct")
   });
   it("getPastTipByIndex", async () => {
@@ -394,19 +394,19 @@ describe("Autopay - function tests", () => {
     let blocky2 = await h.getBlock();
     res = await autopay.getPastTipByIndex(ETH_QUERY_ID,0)
     assert(res[0] == web3.utils.toWei("100"), "past tip amount should be correct")
-    assert(res[1] == blocky1.timestamp, "past tip amount should be correct")
+    assert(res[1] == blocky1.timestamp + 1, "past tip amount should be correct")
     res = await autopay.getPastTipByIndex(ETH_QUERY_ID,1)
     assert(res[0] == web3.utils.toWei("200"), "past tip amount should be correct")
-    assert(res[1] == blocky2.timestamp, "past tip amount should be correct")
+    assert(res[1] == blocky2.timestamp + 1, "past tip amount should be correct")
     await tellor.approve(autopay.address,web3.utils.toWei("300"))
     await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("300"),ETH_QUERY_DATA)
     let blocky3 = await h.getBlock();
     res = await autopay.getPastTipByIndex(ETH_QUERY_ID,0)
     assert(res[0] == web3.utils.toWei("100"), "past tip amount should be correct")
-    assert(res[1] == blocky1.timestamp, "past tip 1 timestamp should be correct")
+    assert(res[1] == blocky1.timestamp + 1, "past tip 1 timestamp should be correct")
     res = await autopay.getPastTipByIndex(ETH_QUERY_ID,1)
     assert(res[0] == web3.utils.toWei("500"), "past tip amount 2 should be correct")
-    assert(res[1] == blocky3.timestamp, "past tip 2 timestamp should be correct")
+    assert(res[1] == blocky3.timestamp + 1, "past tip 2 timestamp should be correct")
   });
   it("getPastTipCount", async () => {
     let res = await autopay.getPastTipCount(ETH_QUERY_ID)

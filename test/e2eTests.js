@@ -56,7 +56,7 @@ describe("Autopay - e2e tests", function() {
   pastTips = await autopay.getPastTips(ETH_QUERY_ID)
   assert(pastTips.length == 1, "Tips array should be correct length")
   assert(pastTips[0].amount == web3.utils.toWei("10"), "Recorded tip amount should be correct")
-  assert(pastTips[0].timestamp == blocky.timestamp, "Tip timestamp should be recorded correctly")
+  assert(pastTips[0].timestamp == blocky.timestamp + 1, "Tip timestamp should be recorded correctly")
   // submit value
   await tellor.connect(accounts[2]).submitValue(ETH_QUERY_ID, h.uintTob32("200"), 0, ETH_QUERY_DATA)
   blockySubmit1 = await h.getBlock()
@@ -68,9 +68,9 @@ describe("Autopay - e2e tests", function() {
   pastTips = await autopay.getPastTips(ETH_QUERY_ID)
   assert(pastTips.length == 2, "Tips array should be correct length")
   assert(pastTips[0].amount == web3.utils.toWei("10"), "First recorded tip amount should be correct")
-  assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+  assert(pastTips[0].timestamp == blocky.timestamp + 1, "First tip timestamp should be recorded correctly")
   assert(pastTips[1].amount == web3.utils.toWei("20"), "Second recorded tip amount should be correct")
-  assert(pastTips[1].timestamp == blocky2.timestamp, "Second tip timestamp should be recorded correctly")
+  assert(pastTips[1].timestamp == blocky2.timestamp + 1, "Second tip timestamp should be recorded correctly")
   // add third tip
   await autopay1.tip(ETH_QUERY_ID, web3.utils.toWei("10"),ETH_QUERY_DATA)
   blocky3 = await h.getBlock()
@@ -79,9 +79,9 @@ describe("Autopay - e2e tests", function() {
   pastTips = await autopay.getPastTips(ETH_QUERY_ID)
   assert(pastTips.length == 2, "Tips array should be correct length")
   assert(pastTips[0].amount == web3.utils.toWei("10"), "First recorded tip amount should be correct")
-  assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+  assert(pastTips[0].timestamp == blocky.timestamp + 1, "First tip timestamp should be recorded correctly")
   assert(pastTips[1].amount == web3.utils.toWei("30"), "Second cumulative recorded tip amount should be correct")
-  assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be updated correctly")
+  assert(pastTips[1].timestamp == blocky3.timestamp + 1, "Second tip timestamp should be updated correctly")
   // claim first tip
   await h.advanceTime(3600 * 12)
   await autopay.connect(accounts[2]).claimOneTimeTip(ETH_QUERY_ID, [blockySubmit1.timestamp])
@@ -91,9 +91,9 @@ describe("Autopay - e2e tests", function() {
   pastTips = await autopay.getPastTips(ETH_QUERY_ID)
   assert(pastTips.length == 2, "Tips array should be correct length")
   assert(pastTips[0].amount == 0, "First recorded tip amount should be set to zero after tip claimed")
-  assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+  assert(pastTips[0].timestamp == blocky.timestamp + 1, "First tip timestamp should be recorded correctly")
   assert(pastTips[1].amount == web3.utils.toWei("30"), "Second cumulative recorded tip amount should be correct")
-  assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be correct")
+  assert(pastTips[1].timestamp == blocky3.timestamp + 1, "Second tip timestamp should be correct")
   // submit value
   await tellor.connect(accounts[2]).submitValue(ETH_QUERY_ID, h.uintTob32("200"), 0, ETH_QUERY_DATA)
   blockySubmit2 = await h.getBlock()
@@ -106,9 +106,9 @@ describe("Autopay - e2e tests", function() {
   pastTips = await autopay.getPastTips(ETH_QUERY_ID)
   assert(pastTips.length == 2, "Tips array should be correct length")
   assert(pastTips[0].amount == 0, "First recorded tip amount should be set to zero after tip claimed")
-  assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+  assert(pastTips[0].timestamp == blocky.timestamp + 1, "First tip timestamp should be recorded correctly")
   assert(pastTips[1].amount == 0, "Second cumulative recorded tip amount should be set to zero after tip claimed")
-  assert(pastTips[1].timestamp == blocky3.timestamp, "Second tip timestamp should be correct")
+  assert(pastTips[1].timestamp == blocky3.timestamp + 1, "Second tip timestamp should be correct")
 })
 
   it("single queryID, multiple refills, pulls", async function() {
@@ -161,7 +161,7 @@ describe("Autopay - e2e tests", function() {
     pastTips = await autopay.getPastTips(ETH_QUERY_ID)
     assert(pastTips.length == 1, "Tips array should be correct length")
     assert(pastTips[0].amount == web3.utils.toWei("10"), "First recorded tip amount should be correct")
-    assert(pastTips[0].timestamp == blocky.timestamp, "First tip timestamp should be recorded correctly")
+    assert(pastTips[0].timestamp == blocky.timestamp + 1, "First tip timestamp should be recorded correctly")
     let abal = await tellor.balanceOf(autopay.address)
     assert(ethers.utils.formatEther(abal) - 999 - 10 == 0, "Autopay contract balance should update correctly")
     // faucet and add more funds to autopay feed
@@ -741,15 +741,12 @@ describe("Autopay - e2e tests", function() {
     expect(await tellor.balanceOf(autopay.address)).to.equal(h.toWei("1"));
 
     tip = await autopay.getPastTipByIndex(ETH_QUERY_ID, 0)
-    expect(tip.timestamp).to.equal(blocky.timestamp)
+    expect(tip.timestamp).to.equal(blocky.timestamp + 1)
     expect(tip.amount).to.equal(h.toWei("1"))
     expect(await tellor.getTimestampbyQueryIdandIndex(ETH_QUERY_ID, 0)).to.equal(blocky.timestamp)
 
     await h.advanceTime(3600 * 12)
-    await tipAndReport.claimOneTimeTip(ETH_QUERY_ID, [blocky.timestamp])
-    expectedBalance = h.toWei((1 * (1000 - FEE) / 1000).toString())
-    expect(await tellor.balanceOf(tipAndReport.address)).to.equal(expectedBalance);
-    expect(await tellor.balanceOf(autopay.address)).to.equal(0);
+    await h.expectThrow(tipAndReport.claimOneTimeTip(ETH_QUERY_ID, [blocky.timestamp]))
   })
 
   it("test no claimTips to pay out", async function() {

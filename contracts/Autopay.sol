@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.3;
 
-import { UsingTellor } from "usingtellor/contracts/UsingTellor.sol";
-import { IERC20 } from "./interfaces/IERC20.sol";
+import {UsingTellor} from "usingtellor/contracts/UsingTellor.sol";
+import {IERC20} from "./interfaces/IERC20.sol";
 import "./interfaces/IQueryDataStorage.sol";
 
 /**
@@ -114,9 +114,10 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @param _timestamps[] batch of timestamps array of reported data eligible for reward
      */
-    function claimOneTimeTip(bytes32 _queryId, uint256[] calldata _timestamps)
-        external
-    {
+    function claimOneTimeTip(
+        bytes32 _queryId,
+        uint256[] calldata _timestamps
+    ) external {
         require(
             tips[_queryId].length > 0,
             "no tips submitted for this queryId"
@@ -328,19 +329,19 @@ contract Autopay is UsingTellor {
         require(_amount > 0, "tip must be greater than zero");
         Tip[] storage _tips = tips[_queryId];
         if (_tips.length == 0) {
-            _tips.push(Tip(_amount, block.timestamp, _amount));
+            _tips.push(Tip(_amount, block.timestamp + 1, _amount));
             queryDataStorage.storeData(_queryData);
         } else {
             (, uint256 _timestampRetrieved) = _getCurrentValue(_queryId);
             if (_timestampRetrieved < _tips[_tips.length - 1].timestamp) {
-                _tips[_tips.length - 1].timestamp = block.timestamp;
+                _tips[_tips.length - 1].timestamp = block.timestamp + 1;
                 _tips[_tips.length - 1].amount += _amount;
                 _tips[_tips.length - 1].cumulativeTips += _amount;
             } else {
                 _tips.push(
                     Tip(
                         _amount,
-                        block.timestamp,
+                        block.timestamp + 1,
                         _tips[_tips.length - 1].cumulativeTips + _amount
                     )
                 );
@@ -367,11 +368,9 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @return feedIds array for queryId
      */
-    function getCurrentFeeds(bytes32 _queryId)
-        external
-        view
-        returns (bytes32[] memory)
-    {
+    function getCurrentFeeds(
+        bytes32 _queryId
+    ) external view returns (bytes32[] memory) {
         return currentFeeds[_queryId];
     }
 
@@ -399,11 +398,9 @@ contract Autopay is UsingTellor {
      * @param _feedId unique feedId of parameters
      * @return FeedDetails details of specified feed
      */
-    function getDataFeed(bytes32 _feedId)
-        external
-        view
-        returns (FeedDetails memory)
-    {
+    function getDataFeed(
+        bytes32 _feedId
+    ) external view returns (FeedDetails memory) {
         return (dataFeed[queryIdFromDataFeedId[_feedId]][_feedId].details);
     }
 
@@ -481,11 +478,9 @@ contract Autopay is UsingTellor {
      * @param _queryId id of reported data
      * @return Tip struct (amount/timestamp) of all past tips
      */
-    function getPastTips(bytes32 _queryId)
-        external
-        view
-        returns (Tip[] memory)
-    {
+    function getPastTips(
+        bytes32 _queryId
+    ) external view returns (Tip[] memory) {
         return tips[_queryId];
     }
 
@@ -495,11 +490,10 @@ contract Autopay is UsingTellor {
      * @param _index uint index in the Tip array
      * @return amount/timestamp of specific tip
      */
-    function getPastTipByIndex(bytes32 _queryId, uint256 _index)
-        external
-        view
-        returns (Tip memory)
-    {
+    function getPastTipByIndex(
+        bytes32 _queryId,
+        uint256 _index
+    ) external view returns (Tip memory) {
         return tips[_queryId][_index];
     }
 
@@ -508,11 +502,9 @@ contract Autopay is UsingTellor {
      * @param _feedId dataFeed unique identifier
      * @return bytes32 corresponding query ID
      */
-    function getQueryIdFromFeedId(bytes32 _feedId)
-        external
-        view
-        returns (bytes32)
-    {
+    function getQueryIdFromFeedId(
+        bytes32 _feedId
+    ) external view returns (bytes32) {
         return queryIdFromDataFeedId[_feedId];
     }
 
@@ -594,11 +586,9 @@ contract Autopay is UsingTellor {
      * @param _b bytes value to convert to uint256
      * @return _number uint256 converted from bytes
      */
-    function _bytesToUint(bytes memory _b)
-        internal
-        pure
-        returns (uint256 _number)
-    {
+    function _bytesToUint(
+        bytes memory _b
+    ) internal pure returns (uint256 _number) {
         for (uint256 _i = 0; _i < _b.length; _i++) {
             _number = _number * 256 + uint8(_b[_i]);
         }
@@ -610,10 +600,10 @@ contract Autopay is UsingTellor {
      * @param _timestamp timestamp of one time tip
      * @return _tipAmount of tip
      */
-    function _getOneTimeTipAmount(bytes32 _queryId, uint256 _timestamp)
-        internal
-        returns (uint256 _tipAmount)
-    {
+    function _getOneTimeTipAmount(
+        bytes32 _queryId,
+        uint256 _timestamp
+    ) internal returns (uint256 _tipAmount) {
         require(
             block.timestamp - _timestamp > 12 hours,
             "buffer time has not passed"
@@ -687,11 +677,9 @@ contract Autopay is UsingTellor {
      * @return _timestampRetrieved the retrieved value's timestamp
      */
 
-    function _getCurrentValue(bytes32 _queryId)
-        internal
-        view
-        returns (bytes memory _value, uint256 _timestampRetrieved)
-    {
+    function _getCurrentValue(
+        bytes32 _queryId
+    ) internal view returns (bytes memory _value, uint256 _timestampRetrieved) {
         uint256 _count = getNewValueCountbyQueryId(_queryId);
         if (_count == 0) {
             return (bytes(""), 0);
