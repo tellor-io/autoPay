@@ -348,7 +348,7 @@ describe("Autopay - function tests", () => {
     expect(result[5]).to.equal(0);
     expect(result[6]).to.equal(0);
   });
-  it.only("getCurrentTip", async () => {
+  it("getCurrentTip", async () => {
     let res = await autopay.getCurrentTip(ETH_QUERY_ID);
     assert(res == 0, "tip amount should be zero")
     await h.expectThrow(autopay.tip(ETH_QUERY_ID,web3.utils.toWei("100"),ETH_QUERY_DATA));
