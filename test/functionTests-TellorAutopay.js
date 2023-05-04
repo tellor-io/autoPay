@@ -356,6 +356,11 @@ describe("Autopay - function tests", () => {
     await autopay.tip(ETH_QUERY_ID,web3.utils.toWei("100"),ETH_QUERY_DATA)
     res = await autopay.getCurrentTip(ETH_QUERY_ID);
     assert(res == web3.utils.toWei("100"), "tip should be correct")
+    await tellor.submitValue(ETH_QUERY_ID, h.uintTob32(3000), 0, ETH_QUERY_DATA)
+    blocky = await h.getBlock()
+    assert(await autopay.getCurrentTip(ETH_QUERY_ID) == 0, "current tip should be zero after report")
+    await tellor.beginDispute(ETH_QUERY_ID, blocky.timestamp)
+    assert(await autopay.getCurrentTip(ETH_QUERY_ID) == h.toWei("100"), "current tip should be zero after report")
   });
   it("getPastTips", async () => {
     await tellor.faucet(accounts[0].address)
