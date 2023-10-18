@@ -33,6 +33,8 @@
     "@openzeppelin/contracts": "^4.4.1",
     "dotenv": "^16.0.0",
     "hardhat-contract-sizer": "^2.4.0",
+    "tellorflex": "github:tellor-io/tellorFlex",
+    "polygongovernance": "github:tellor-io/governance",
     "solidity-coverage": "^0.7.20",
     "usingtellor": "^5.0.1"
   }
